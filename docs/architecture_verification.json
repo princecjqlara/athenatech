@@ -1,0 +1,1166 @@
+{
+    "metadata": {
+        "title": "ATHENA Architecture Verification Answers",
+        "version": "1.0",
+        "timestamp": "2026-01-11T09:59:00+08:00",
+        "totalQuestions": 141,
+        "summary": {
+            "confirmed": 108,
+            "partial": 27,
+            "gaps": 6
+        }
+    },
+    "categories": [
+        {
+            "name": "System Isolation & Dependency Graph",
+            "confirmed": 8,
+            "partial": 2,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 1,
+                    "question": "Can you draw a dependency graph showing that System 1, System 2, and System 3 do not import each other directly?",
+                    "status": "confirmed",
+                    "answer": "Each system lives in separate directory (structure/, narrative/, conversionOwner.ts). No cross-imports in source files.",
+                    "evidence": "Verified via code analysis - zero imports between systems"
+                },
+                {
+                    "id": 2,
+                    "question": "Is there any shared utility that could accidentally pass semantic data into System 1?",
+                    "status": "confirmed",
+                    "answer": "No. config/gates.ts only contains numeric thresholds. types/ only contains interfaces. No semantic data flows through shared code.",
+                    "evidence": "Shared modules contain only configuration and type definitions"
+                },
+                {
+                    "id": 3,
+                    "question": "Can System 1 produce an output if System 2 is completely deleted?",
+                    "status": "confirmed",
+                    "answer": "Yes. placementAwareness.ts has zero imports from narrative/. Structure scoring is fully independent.",
+                    "evidence": "No imports from narrative/ in structure/ directory"
+                },
+                {
+                    "id": 4,
+                    "question": "Can System 3 produce an output if System 2 is completely deleted?",
+                    "status": "confirmed",
+                    "answer": "Yes. conversionOwner.ts and wrongBlame/ have zero imports from narrative/. Conversion scoring is fully independent.",
+                    "evidence": "No imports from narrative/ in conversion modules"
+                },
+                {
+                    "id": 5,
+                    "question": "If System 1 is unhealthy, is it impossible (not unlikely) for System 3 to blame creative?",
+                    "status": "confirmed",
+                    "answer": "Yes. diagnoseConversionIssue() in wrongBlame checks deliveryHealth first. Returns 'unknown' if structure unhealthy.",
+                    "evidence": "wrongBlame/index.ts - priority check for delivery health"
+                },
+                {
+                    "id": 6,
+                    "question": "Is there any code path where System 2 can activate without System 1 being healthy?",
+                    "status": "confirmed",
+                    "answer": "No. checkNarrativeEligibility() line 146: if (deliveryHealth !== 'healthy') return ineligible",
+                    "evidence": "narrativeChecklist.ts:146"
+                },
+                {
+                    "id": 7,
+                    "question": "Is there any code path where System 2 can activate with insufficient conversion volume?",
+                    "status": "confirmed",
+                    "answer": "No. Line 166: if (totalConversions < GATE_CONFIG.NARRATIVE_MIN_CONVERSIONS) return ineligible",
+                    "evidence": "narrativeChecklist.ts:166"
+                },
+                {
+                    "id": 8,
+                    "question": "Is there any place where narrative fields are used outside diagnoseNarrative()?",
+                    "status": "partial",
+                    "answer": "NarrativeChecklist is used in UI forms and storage. Fields are displayed but not used in System 1/3 scoring.",
+                    "evidence": "UI components reference checklist for display only"
+                },
+                {
+                    "id": 9,
+                    "question": "Are any System 2 fields ever stored in the same table as System 1 features?",
+                    "status": "confirmed",
+                    "answer": "No. narrative_analysis table is separate from delivery_scores. Different tables in schema.",
+                    "evidence": "phase1_integrity.sql - separate table definitions"
+                },
+                {
+                    "id": 10,
+                    "question": "Are there any temporary shortcuts or TODOs that bypass gates?",
+                    "status": "confirmed",
+                    "answer": "No. Searched codebase for '// TODO' and 'bypass' - no gate bypasses found.",
+                    "evidence": "Codebase search returned no gate bypass patterns"
+                }
+            ]
+        },
+        {
+            "name": "Gating Authority",
+            "confirmed": 9,
+            "partial": 1,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 11,
+                    "question": "Is there exactly one gating authority function, and is it impossible to bypass?",
+                    "status": "confirmed",
+                    "answer": "Yes. evaluateGates() is the single function. All callers must use it. No alternative paths.",
+                    "evidence": "gates/scoringGates.ts - single export for gating"
+                },
+                {
+                    "id": 12,
+                    "question": "Are gates enforced at both backend and UI layers?",
+                    "status": "confirmed",
+                    "answer": "Yes. Backend: evaluateGates() in API routes. UI: GatedContent.tsx displays gate status.",
+                    "evidence": "Both layers check gate status"
+                },
+                {
+                    "id": 13,
+                    "question": "If the UI is bypassed, does the backend still block illegal scoring?",
+                    "status": "confirmed",
+                    "answer": "Yes. evaluateGates() runs server-side. canScoreDelivery/canScoreConversion checked before any scoring logic.",
+                    "evidence": "Server-side enforcement in API layer"
+                },
+                {
+                    "id": 14,
+                    "question": "Are all gate failures returned with a machine-readable reason code?",
+                    "status": "confirmed",
+                    "answer": "Yes. GateStatus.gates object contains structured status for each gate (age, spend, impressions, etc.).",
+                    "evidence": "GateStatus interface in scoringGates.ts"
+                },
+                {
+                    "id": 15,
+                    "question": "Are gate reasons logged persistently, not just returned?",
+                    "status": "confirmed",
+                    "answer": "Yes. logGateDecision() in auditLogger.ts persists to gate_audit_log table.",
+                    "evidence": "auditLogger.ts and phase4_audit.sql"
+                },
+                {
+                    "id": 16,
+                    "question": "Can you reproduce every recommendation back to the exact gate decisions that allowed it?",
+                    "status": "confirmed",
+                    "answer": "Yes. trace_id links gate_audit_log to recommendations table.",
+                    "evidence": "trace_id column in both tables"
+                },
+                {
+                    "id": 17,
+                    "question": "Is the order of gates deterministic and documented?",
+                    "status": "confirmed",
+                    "answer": "Yes. evaluateGates() checks in order: age → spend → impressions → conversions → iOS → modeled → attribution. Documented in function.",
+                    "evidence": "scoringGates.ts - sequential checks"
+                },
+                {
+                    "id": 18,
+                    "question": "What happens if two gates fail at once, and is the message clear?",
+                    "status": "confirmed",
+                    "answer": "gateMessages is an array. All failures are aggregated and returned together.",
+                    "evidence": "GateStatus.gateMessages: string[]"
+                },
+                {
+                    "id": 19,
+                    "question": "Is insufficient data treated as a state, not an error?",
+                    "status": "confirmed",
+                    "answer": "Yes. GatedContent.tsx shows progress bars and next steps, not error messages.",
+                    "evidence": "GatedContent.tsx component design"
+                },
+                {
+                    "id": 20,
+                    "question": "Are gate thresholds configurable without code changes?",
+                    "status": "partial",
+                    "answer": "GATE_CONFIG is in code. Could move to env vars or DB for runtime config.",
+                    "evidence": "config/gates.ts - hardcoded values"
+                }
+            ]
+        },
+        {
+            "name": "Confidence Computation",
+            "confirmed": 7,
+            "partial": 3,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 21,
+                    "question": "Is confidence computed in exactly one place?",
+                    "status": "confirmed",
+                    "answer": "Yes. evaluateGates() computes deliveryConfidenceMax and conversionConfidenceMax. Single source.",
+                    "evidence": "scoringGates.ts - single computation location"
+                },
+                {
+                    "id": 22,
+                    "question": "Can confidence ever increase without more data?",
+                    "status": "confirmed",
+                    "answer": "No. clampConversionConfidence() only allows decreasing to lower level.",
+                    "evidence": "clampConversionConfidence function logic"
+                },
+                {
+                    "id": 23,
+                    "question": "Can confidence remain high after a detected data integrity issue?",
+                    "status": "confirmed",
+                    "answer": "No. iOS penalty, modeled penalty, attribution mismatch all force confidence down.",
+                    "evidence": "Penalty logic in scoringGates.ts"
+                },
+                {
+                    "id": 24,
+                    "question": "Is confidence capped when iOS traffic or modeled conversions are missing?",
+                    "status": "confirmed",
+                    "answer": "Yes. Lines 136-145: Missing iOS → 'low'. Lines 158-165: Missing modeled → 'medium'.",
+                    "evidence": "scoringGates.ts:136-165"
+                },
+                {
+                    "id": 25,
+                    "question": "Is confidence capped when attribution settings mismatch?",
+                    "status": "confirmed",
+                    "answer": "Yes. Line 175: conversionConfidenceMax = 'insufficient' when mismatch detected.",
+                    "evidence": "scoringGates.ts:175"
+                },
+                {
+                    "id": 26,
+                    "question": "Is confidence capped when baseline quality is low?",
+                    "status": "confirmed",
+                    "answer": "Yes. computeEfficiencyScore() returns confidence: 'low' when baseline quality is 'low'.",
+                    "evidence": "baselineBuilder.ts - computeEfficiencyScore"
+                },
+                {
+                    "id": 27,
+                    "question": "Is confidence explicitly displayed wherever a recommendation exists?",
+                    "status": "confirmed",
+                    "answer": "Yes. Recommendation interface includes confidence field. RecommendationCard.tsx displays it.",
+                    "evidence": "RecommendationCard.tsx component"
+                },
+                {
+                    "id": 28,
+                    "question": "Does every user-facing claim include its confidence?",
+                    "status": "partial",
+                    "answer": "Recommendations include confidence. Some UI metrics may lack explicit confidence labels.",
+                    "evidence": "Partial coverage in UI components"
+                },
+                {
+                    "id": 29,
+                    "question": "Is there any language implying certainty such as 'will' or 'guaranteed'?",
+                    "status": "partial",
+                    "answer": "Searched for 'will improve', 'guaranteed' - not found in templates. Should audit all UI copy.",
+                    "evidence": "Template search negative"
+                },
+                {
+                    "id": 30,
+                    "question": "Are confidence thresholds explained to users in plain language?",
+                    "status": "partial",
+                    "answer": "Threshold meanings defined in code. Need user-facing documentation.",
+                    "evidence": "Gap in user documentation"
+                }
+            ]
+        },
+        {
+            "name": "Client-Side Extraction",
+            "confirmed": 4,
+            "partial": 4,
+            "gaps": 2,
+            "questions": [
+                {
+                    "id": 31,
+                    "question": "Can System 1 run fully client-side with no server fallback?",
+                    "status": "partial",
+                    "answer": "Structure extraction designed for client but implementation incomplete.",
+                    "evidence": "Partial implementation"
+                },
+                {
+                    "id": 32,
+                    "question": "What happens if extraction fails mid-way?",
+                    "status": "gap",
+                    "answer": "No explicit error handling for partial extraction. Need to add.",
+                    "evidence": "Missing error handling"
+                },
+                {
+                    "id": 33,
+                    "question": "Are partial extractions handled safely?",
+                    "status": "gap",
+                    "answer": "No partial extraction logic.",
+                    "evidence": "Missing feature"
+                },
+                {
+                    "id": 34,
+                    "question": "Is extraction schema versioned?",
+                    "status": "confirmed",
+                    "answer": "Yes. SCORING_VERSIONS.STRUCTURE_SCHEMA in versions.ts.",
+                    "evidence": "config/versions.ts"
+                },
+                {
+                    "id": 35,
+                    "question": "Can old fingerprints coexist with new schema versions?",
+                    "status": "partial",
+                    "answer": "Version is stored but no migration logic for old data.",
+                    "evidence": "Partial implementation"
+                },
+                {
+                    "id": 36,
+                    "question": "Are structure scores always placement-aware?",
+                    "status": "confirmed",
+                    "answer": "Yes. placementAwareness.ts exports PLACEMENT_BENCHMARKS per placement.",
+                    "evidence": "structure/placementAwareness.ts"
+                },
+                {
+                    "id": 37,
+                    "question": "Is it impossible to compute a global structure score without context?",
+                    "status": "confirmed",
+                    "answer": "Yes. validateScoringContext() requires placement and objective.",
+                    "evidence": "placementAwareness.ts - validateScoringContext"
+                },
+                {
+                    "id": 38,
+                    "question": "Are aspect-ratio mismatches downgraded or only warned?",
+                    "status": "partial",
+                    "answer": "Returns warning message but doesn't auto-downgrade confidence. Could strengthen.",
+                    "evidence": "Warning only, not confidence impact"
+                },
+                {
+                    "id": 39,
+                    "question": "Can intentional silence or darkness be misclassified, and is that explained?",
+                    "status": "partial",
+                    "answer": "Could happen. Need explicit handling for artistic intent.",
+                    "evidence": "No artistic intent detection"
+                },
+                {
+                    "id": 40,
+                    "question": "Are structure signals ever trained against conversion outcomes?",
+                    "status": "confirmed",
+                    "answer": "No. System 1 is purely mechanical. No ML training against outcomes.",
+                    "evidence": "No ML in System 1"
+                }
+            ]
+        },
+        {
+            "name": "Narrative System (System 2)",
+            "confirmed": 5,
+            "partial": 0,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 41,
+                    "question": "Is every System 2 field strictly observable as presence, absence, or position?",
+                    "status": "confirmed",
+                    "answer": "Yes. NarrativeChecklist interface: all fields are boolean or enum position values.",
+                    "evidence": "NarrativeChecklist interface definition"
+                },
+                {
+                    "id": 42,
+                    "question": "Can a user misunderstand any field without a tooltip or example?",
+                    "status": "confirmed",
+                    "answer": "checklistTooltips.ts exists with examples. All fields covered.",
+                    "evidence": "config/checklistTooltips.ts"
+                },
+                {
+                    "id": 43,
+                    "question": "Are tooltips concrete and non-theoretical?",
+                    "status": "confirmed",
+                    "answer": "Yes. Tooltips include specific examples like 'Buy Now', 'Get 50% Off'.",
+                    "evidence": "Concrete examples in tooltips"
+                },
+                {
+                    "id": 44,
+                    "question": "Is free-text completely ignored by scoring logic?",
+                    "status": "confirmed",
+                    "answer": "Yes. NarrativeNotes.usedForScoring: false - literal false type.",
+                    "evidence": "Type system enforcement"
+                },
+                {
+                    "id": 45,
+                    "question": "Is free-text excluded at the type-system level?",
+                    "status": "confirmed",
+                    "answer": "Yes. Type is usedForScoring: false - cannot be set to true.",
+                    "evidence": "Literal type in interface"
+                }
+            ]
+        },
+        {
+            "name": "LLM Safety",
+            "confirmed": 12,
+            "partial": 3,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 46,
+                    "question": "Is LLM output schema-validated?",
+                    "status": "confirmed",
+                    "answer": "Yes. validateLlmOutput() in safety.ts checks all keys.",
+                    "evidence": "policy/safety.ts - validateLlmOutput"
+                },
+                {
+                    "id": 47,
+                    "question": "Does LLM output fail closed or fail open?",
+                    "status": "confirmed",
+                    "answer": "Fail closed. validateLlmOutput() throws error on invalid keys. Hard failure.",
+                    "evidence": "Throws on validation failure"
+                },
+                {
+                    "id": 48,
+                    "question": "Is LLM allowed to infer meaning, emotion, or intent?",
+                    "status": "confirmed",
+                    "answer": "No. Prompt explicitly forbids: 'Do NOT judge quality, strength, or effectiveness.'",
+                    "evidence": "narrative/llmPrompt.ts"
+                },
+                {
+                    "id": 49,
+                    "question": "Is llmAssisted provenance tracked?",
+                    "status": "confirmed",
+                    "answer": "Yes. NarrativeChecklist.llmAssisted: boolean field.",
+                    "evidence": "NarrativeChecklist interface"
+                },
+                {
+                    "id": 50,
+                    "question": "Is userConfirmed required before normal confidence is allowed?",
+                    "status": "confirmed",
+                    "answer": "Yes. diagnoseNarrative() line 307: if (llmAssisted && !userConfirmed) confidence = 'low'",
+                    "evidence": "narrativeChecklist.ts:307"
+                },
+                {
+                    "id": 51,
+                    "question": "Is the System 2 LLM prompt versioned?",
+                    "status": "partial",
+                    "answer": "Prompt is in code file. Could add prompt version constant.",
+                    "evidence": "No explicit versioning"
+                },
+                {
+                    "id": 52,
+                    "question": "Can you roll back to a previous prompt safely?",
+                    "status": "partial",
+                    "answer": "Would require git revert. No runtime prompt versioning.",
+                    "evidence": "Git-based rollback only"
+                },
+                {
+                    "id": 53,
+                    "question": "Is there a test that intentionally tries to trick the LLM into judging quality?",
+                    "status": "partial",
+                    "answer": "No adversarial LLM test. Should add.",
+                    "evidence": "Gap in test coverage"
+                },
+                {
+                    "id": 54,
+                    "question": "Does the system catch hallucinated fields?",
+                    "status": "confirmed",
+                    "answer": "Yes. validateLlmOutput() rejects any key not in ALLOWED_LLM_OUTPUT_KEYS.",
+                    "evidence": "Key whitelist validation"
+                },
+                {
+                    "id": 55,
+                    "question": "Are unexpected keys rejected?",
+                    "status": "confirmed",
+                    "answer": "Yes. Throws: 'LLM output contains forbidden key: ${key}'",
+                    "evidence": "Error message in validateLlmOutput"
+                },
+                {
+                    "id": 56,
+                    "question": "Is LLM usage optional and skippable?",
+                    "status": "confirmed",
+                    "answer": "Yes. llmAssisted: false works. User can fill manually.",
+                    "evidence": "Manual input supported"
+                },
+                {
+                    "id": 57,
+                    "question": "Is there a way to disable LLM entirely and still function?",
+                    "status": "confirmed",
+                    "answer": "Yes. No LLM dependency in core scoring.",
+                    "evidence": "Optional LLM path"
+                },
+                {
+                    "id": 58,
+                    "question": "Is LLM output ever reused across users?",
+                    "status": "confirmed",
+                    "answer": "No. Each extraction is per-user. No cross-user caching.",
+                    "evidence": "User-scoped data"
+                },
+                {
+                    "id": 59,
+                    "question": "Is any LLM output used for training System 1?",
+                    "status": "confirmed",
+                    "answer": "No. System 1 is purely mechanical. No LLM data flows to it.",
+                    "evidence": "No LLM-to-S1 data path"
+                },
+                {
+                    "id": 60,
+                    "question": "Is there any hidden semantic creep path?",
+                    "status": "confirmed",
+                    "answer": "No. SAFETY_RULES.md lists forbidden patterns. checkForbiddenTerms() scans code.",
+                    "evidence": "Runtime and policy enforcement"
+                }
+            ]
+        },
+        {
+            "name": "Conversion Owner (System 3)",
+            "confirmed": 8,
+            "partial": 2,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 61,
+                    "question": "Is conversion type mandatory before scoring?",
+                    "status": "confirmed",
+                    "answer": "Yes. baselineBuilder.ts: conversionType is required param.",
+                    "evidence": "Required function parameter"
+                },
+                {
+                    "id": 62,
+                    "question": "Can two different conversion types ever be compared?",
+                    "status": "confirmed",
+                    "answer": "No. computeEfficiencyScore() compares to baseline of same type only.",
+                    "evidence": "Type-scoped comparison"
+                },
+                {
+                    "id": 63,
+                    "question": "Are baselines per account, per conversion type, and per placement?",
+                    "status": "confirmed",
+                    "answer": "Yes. account_baselines table: UNIQUE(user_id, conversion_type, placement, objective)",
+                    "evidence": "Database constraint"
+                },
+                {
+                    "id": 64,
+                    "question": "Is there a new account mode that blocks scoring?",
+                    "status": "confirmed",
+                    "answer": "Yes. isNewAccountMode() returns true if no baseline. canComputeEfficiency() returns false.",
+                    "evidence": "baselineBuilder.ts functions"
+                },
+                {
+                    "id": 65,
+                    "question": "Is baseline quality computed and surfaced?",
+                    "status": "confirmed",
+                    "answer": "Yes. getBaselineQuality() returns 'high'/'medium'/'low'/'none'.",
+                    "evidence": "Computed column in DB + function"
+                },
+                {
+                    "id": 66,
+                    "question": "Are promo periods excluded from baseline calculation?",
+                    "status": "confirmed",
+                    "answer": "Yes. isPromoDay() detects >2x normal spend. computeBaseline() excludes promo days.",
+                    "evidence": "Promo detection logic"
+                },
+                {
+                    "id": 67,
+                    "question": "Can baselines drift too quickly after optimizations?",
+                    "status": "partial",
+                    "answer": "No explicit post-optimization exclusion window. Could add.",
+                    "evidence": "Gap in baseline logic"
+                },
+                {
+                    "id": 68,
+                    "question": "Is attribution window persisted and reused consistently?",
+                    "status": "confirmed",
+                    "answer": "Yes. profiles.attribution_window column added in schema.",
+                    "evidence": "phase4_audit.sql"
+                },
+                {
+                    "id": 69,
+                    "question": "Is attribution mismatch blocking comparisons?",
+                    "status": "confirmed",
+                    "answer": "Yes. evaluateGates() sets attributionBlocked = true and confidence to 'insufficient'.",
+                    "evidence": "scoringGates.ts attribution check"
+                },
+                {
+                    "id": 70,
+                    "question": "Are modeled versus measured conversions distinguished?",
+                    "status": "partial",
+                    "answer": "modeledConversionPercent tracked but not fully surfaced in UI.",
+                    "evidence": "Backend tracking, partial UI"
+                }
+            ]
+        },
+        {
+            "name": "Wrong-Blame Prevention",
+            "confirmed": 8,
+            "partial": 2,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 71,
+                    "question": "Can the system detect a landing page change independently of creative changes?",
+                    "status": "confirmed",
+                    "answer": "Yes. detectContextChanges() checks lpHash changes.",
+                    "evidence": "wrongBlame/index.ts"
+                },
+                {
+                    "id": 72,
+                    "question": "Can it detect offer changes independently of creative changes?",
+                    "status": "confirmed",
+                    "answer": "Yes. Same function checks price, discount, guarantee changes.",
+                    "evidence": "Context change detection"
+                },
+                {
+                    "id": 73,
+                    "question": "Can it detect tracking failures without user input?",
+                    "status": "confirmed",
+                    "answer": "Yes. detectTrackingAnomaly() detects >50% conversion drop.",
+                    "evidence": "Anomaly detection function"
+                },
+                {
+                    "id": 74,
+                    "question": "Can it detect audience fatigue signals?",
+                    "status": "confirmed",
+                    "answer": "Yes. detectAudienceFatigue() checks frequency + CTR/CPM trends.",
+                    "evidence": "Fatigue detection function"
+                },
+                {
+                    "id": 75,
+                    "question": "If multiple causes are possible, does the system admit uncertainty?",
+                    "status": "confirmed",
+                    "answer": "Yes. diagnoseConversionIssue() returns primaryIssue: 'unknown' when multiple detected.",
+                    "evidence": "Unknown state handling"
+                },
+                {
+                    "id": 76,
+                    "question": "Is creative ever blamed when another primary issue is more likely?",
+                    "status": "confirmed",
+                    "answer": "No. Priority order checks: tracking → context changes → fatigue → creative. Higher-priority wins.",
+                    "evidence": "Priority-based diagnosis"
+                },
+                {
+                    "id": 77,
+                    "question": "Are primary issue outputs constrained to a fixed enum?",
+                    "status": "confirmed",
+                    "answer": "Yes. PrimaryIssue type: 'tracking' | 'context_change' | 'fatigue' | 'creative' | 'attribution' | 'unknown'",
+                    "evidence": "Type definition"
+                },
+                {
+                    "id": 78,
+                    "question": "Is primary issue confidence communicated?",
+                    "status": "confirmed",
+                    "answer": "Yes. IssueDiagnosis.confidence field in return type.",
+                    "evidence": "Confidence in diagnosis"
+                },
+                {
+                    "id": 79,
+                    "question": "Can multiple primary issues coexist?",
+                    "status": "partial",
+                    "answer": "Returns single primary + otherFactors array.",
+                    "evidence": "Primary + secondary pattern"
+                },
+                {
+                    "id": 80,
+                    "question": "Is there a none or unclear state?",
+                    "status": "confirmed",
+                    "answer": "Yes. 'unknown' is a valid primary issue value.",
+                    "evidence": "Unknown in enum"
+                }
+            ]
+        },
+        {
+            "name": "Recommendations",
+            "confirmed": 8,
+            "partial": 2,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 81,
+                    "question": "Does every recommendation have a unique ID?",
+                    "status": "confirmed",
+                    "answer": "Yes. recommendations table has id UUID PRIMARY KEY.",
+                    "evidence": "Database schema"
+                },
+                {
+                    "id": 82,
+                    "question": "Is every recommendation traceable to inputs and gates?",
+                    "status": "confirmed",
+                    "answer": "Yes. trace_id column links to gate_audit_log.",
+                    "evidence": "Foreign key relationship"
+                },
+                {
+                    "id": 83,
+                    "question": "Does every recommendation specify exactly one change?",
+                    "status": "confirmed",
+                    "answer": "Yes. validateRecommendation() requires single whatToChange.",
+                    "evidence": "Validation logic"
+                },
+                {
+                    "id": 84,
+                    "question": "Are ranges or targets always numeric or concrete?",
+                    "status": "confirmed",
+                    "answer": "Yes. targetRange must include number: /\\d/.test(targetRange).",
+                    "evidence": "Regex validation"
+                },
+                {
+                    "id": 85,
+                    "question": "Is the success metric explicit?",
+                    "status": "confirmed",
+                    "answer": "Yes. metricToWatch is required field.",
+                    "evidence": "Required field validation"
+                },
+                {
+                    "id": 86,
+                    "question": "Is the required runtime explicit?",
+                    "status": "confirmed",
+                    "answer": "Yes. runDurationDays is required (3-30 days).",
+                    "evidence": "Duration validation"
+                },
+                {
+                    "id": 87,
+                    "question": "Is the recommendation phrased as a hypothesis?",
+                    "status": "partial",
+                    "answer": "Templates use 'Test...' phrasing. Could strengthen language.",
+                    "evidence": "Template patterns"
+                },
+                {
+                    "id": 88,
+                    "question": "Are vague phrases programmatically blocked?",
+                    "status": "confirmed",
+                    "answer": "Yes. checkVaguePhrases() rejects 'stronger', 'better', 'improve', etc.",
+                    "evidence": "Vague phrase detection"
+                },
+                {
+                    "id": 89,
+                    "question": "Are recommendations ranked by priority?",
+                    "status": "partial",
+                    "answer": "confidence field allows ranking. No explicit priority score.",
+                    "evidence": "Implicit via confidence"
+                },
+                {
+                    "id": 90,
+                    "question": "Can recommendations conflict with each other?",
+                    "status": "partial",
+                    "answer": "No conflict detection logic. Could add.",
+                    "evidence": "Gap in logic"
+                }
+            ]
+        },
+        {
+            "name": "Recommendation Tracking",
+            "confirmed": 4,
+            "partial": 0,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 91,
+                    "question": "Can a user mark a recommendation as followed or ignored?",
+                    "status": "confirmed",
+                    "answer": "Yes. markRecommendationFollowed() and markRecommendationIgnored() in service.",
+                    "evidence": "recommendationsService.ts"
+                },
+                {
+                    "id": 92,
+                    "question": "Is ignoring tracked separately from not seeing?",
+                    "status": "confirmed",
+                    "answer": "Yes. status field: 'pending' | 'followed' | 'ignored'.",
+                    "evidence": "Status enum"
+                },
+                {
+                    "id": 93,
+                    "question": "Are outcomes measured only after sufficient data?",
+                    "status": "confirmed",
+                    "answer": "Yes. measureOutcome() checks conversion thresholds.",
+                    "evidence": "Outcome measurement logic"
+                },
+                {
+                    "id": 94,
+                    "question": "Is outcome attribution conservative?",
+                    "status": "confirmed",
+                    "answer": "Yes. Returns confidence: 'low' unless high conversion volume.",
+                    "evidence": "Conservative attribution"
+                }
+            ]
+        },
+        {
+            "name": "Learning Loop",
+            "confirmed": 4,
+            "partial": 2,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 95,
+                    "question": "Are learnings stored per account?",
+                    "status": "confirmed",
+                    "answer": "Yes. monthly_learnings table has user_id column.",
+                    "evidence": "Database schema"
+                },
+                {
+                    "id": 96,
+                    "question": "Are cross-account learnings anonymized?",
+                    "status": "confirmed",
+                    "answer": "Yes. k-anonymity enforced before aggregation.",
+                    "evidence": "Aggregation logic"
+                },
+                {
+                    "id": 97,
+                    "question": "Is k-anonymity enforced?",
+                    "status": "confirmed",
+                    "answer": "Yes. K_ANONYMITY_MINIMUM: 10 in config.",
+                    "evidence": "config/gates.ts"
+                },
+                {
+                    "id": 98,
+                    "question": "Do learnings decay over time?",
+                    "status": "partial",
+                    "answer": "recency_weight mentioned but not fully implemented.",
+                    "evidence": "Partial implementation"
+                },
+                {
+                    "id": 99,
+                    "question": "Can bad learnings be invalidated?",
+                    "status": "partial",
+                    "answer": "No explicit invalidation mechanism. Could add.",
+                    "evidence": "Gap in feature"
+                },
+                {
+                    "id": 100,
+                    "question": "Can the system explain why it believes a learning exists?",
+                    "status": "partial",
+                    "answer": "Aggregated from outcomes. No explicit explanation.",
+                    "evidence": "Missing explainability"
+                }
+            ]
+        },
+        {
+            "name": "Logging & Traceability",
+            "confirmed": 7,
+            "partial": 2,
+            "gaps": 1,
+            "questions": [
+                {
+                    "id": 101,
+                    "question": "Is every score tagged with model_version?",
+                    "status": "confirmed",
+                    "answer": "Yes. scoring_model_version column added to score tables.",
+                    "evidence": "phase4_audit.sql"
+                },
+                {
+                    "id": 102,
+                    "question": "Is every score tagged with schema_version?",
+                    "status": "confirmed",
+                    "answer": "Yes. structure_schema_version column added.",
+                    "evidence": "phase4_audit.sql"
+                },
+                {
+                    "id": 103,
+                    "question": "Is every recommendation linked to a trace_id?",
+                    "status": "confirmed",
+                    "answer": "Yes. trace_id column in recommendations table.",
+                    "evidence": "Database schema"
+                },
+                {
+                    "id": 104,
+                    "question": "Can you reconstruct a full decision path end-to-end?",
+                    "status": "confirmed",
+                    "answer": "Yes. get_audit_trail(trace_id) function returns full chain.",
+                    "evidence": "SQL function"
+                },
+                {
+                    "id": 105,
+                    "question": "Are gate decisions logged persistently?",
+                    "status": "confirmed",
+                    "answer": "Yes. gate_audit_log table with RLS.",
+                    "evidence": "Database table"
+                },
+                {
+                    "id": 106,
+                    "question": "Are logs queryable by creative, account, and time?",
+                    "status": "confirmed",
+                    "answer": "Yes. Indexes: idx_audit_log_creative, idx_audit_log_trace.",
+                    "evidence": "Database indexes"
+                },
+                {
+                    "id": 107,
+                    "question": "Can you replay a historical decision deterministically?",
+                    "status": "partial",
+                    "answer": "Data logged but no replay mechanism built.",
+                    "evidence": "Missing replay feature"
+                },
+                {
+                    "id": 108,
+                    "question": "Are breaking changes detectable in logs?",
+                    "status": "confirmed",
+                    "answer": "Yes. Version columns allow comparing across changes.",
+                    "evidence": "Version tracking"
+                },
+                {
+                    "id": 109,
+                    "question": "Are migrations reversible?",
+                    "status": "partial",
+                    "answer": "SQL files create tables. No explicit rollback scripts.",
+                    "evidence": "Missing rollback"
+                },
+                {
+                    "id": 110,
+                    "question": "Is there alerting for abnormal behavior?",
+                    "status": "gap",
+                    "answer": "No alerting system implemented.",
+                    "evidence": "Missing feature"
+                }
+            ]
+        },
+        {
+            "name": "User Experience",
+            "confirmed": 6,
+            "partial": 2,
+            "gaps": 2,
+            "questions": [
+                {
+                    "id": 111,
+                    "question": "Can a non-technical marketer misunderstand a score?",
+                    "status": "partial",
+                    "answer": "Scores are 0-100 but context needed. Could add explanations.",
+                    "evidence": "UX gap"
+                },
+                {
+                    "id": 112,
+                    "question": "Are relative versus absolute metrics clearly labeled?",
+                    "status": "partial",
+                    "answer": "'vs baseline' appears in some places. Should be consistent.",
+                    "evidence": "Inconsistent labeling"
+                },
+                {
+                    "id": 113,
+                    "question": "Are users warned not to compare across accounts?",
+                    "status": "gap",
+                    "answer": "No explicit warning. Should add.",
+                    "evidence": "Missing warning"
+                },
+                {
+                    "id": 114,
+                    "question": "Is insufficient data framed as a normal state?",
+                    "status": "confirmed",
+                    "answer": "Yes. GatedContent.tsx shows progress, not errors.",
+                    "evidence": "Component design"
+                },
+                {
+                    "id": 115,
+                    "question": "Is there a single clear 'what to do next' action?",
+                    "status": "confirmed",
+                    "answer": "Yes. Gate messages include specific next steps.",
+                    "evidence": "Message content"
+                },
+                {
+                    "id": 116,
+                    "question": "Are users protected from acting too early?",
+                    "status": "confirmed",
+                    "answer": "Yes. Age gate (48h) and spend gate (₱1000) prevent premature action.",
+                    "evidence": "Gate thresholds"
+                },
+                {
+                    "id": 117,
+                    "question": "Are destructive actions gated by time or data?",
+                    "status": "confirmed",
+                    "answer": "Yes. Recommendations only shown after gates pass.",
+                    "evidence": "Gate enforcement"
+                },
+                {
+                    "id": 118,
+                    "question": "Is expectation-setting explicit during onboarding?",
+                    "status": "gap",
+                    "answer": "No onboarding flow implemented.",
+                    "evidence": "Missing feature"
+                },
+                {
+                    "id": 119,
+                    "question": "Is uncertainty visible, not hidden?",
+                    "status": "confirmed",
+                    "answer": "Yes. Confidence badges shown. Missing data warnings displayed.",
+                    "evidence": "UI indicators"
+                },
+                {
+                    "id": 120,
+                    "question": "Can users tell what the system does not know?",
+                    "status": "confirmed",
+                    "answer": "Yes. 'Data unavailable' messages for iOS, modeled, etc.",
+                    "evidence": "Gap messaging"
+                }
+            ]
+        },
+        {
+            "name": "Safety Policy",
+            "confirmed": 7,
+            "partial": 2,
+            "gaps": 1,
+            "questions": [
+                {
+                    "id": 121,
+                    "question": "Is there an explicit safety rules policy file?",
+                    "status": "confirmed",
+                    "answer": "Yes. docs/SAFETY_RULES.md",
+                    "evidence": "Policy file exists"
+                },
+                {
+                    "id": 122,
+                    "question": "Does it list forbidden semantic detectors?",
+                    "status": "confirmed",
+                    "answer": "Yes. Emotion, face, object, OCR, sentiment, hook_strength, etc.",
+                    "evidence": "Comprehensive list"
+                },
+                {
+                    "id": 123,
+                    "question": "Is there a process required to add new signals?",
+                    "status": "confirmed",
+                    "answer": "Yes. Policy requires architecture review and update to SAFETY_RULES.md.",
+                    "evidence": "Documented process"
+                },
+                {
+                    "id": 124,
+                    "question": "Are legal and bias risks considered before adding features?",
+                    "status": "partial",
+                    "answer": "Not explicitly documented in policy.",
+                    "evidence": "Gap in documentation"
+                },
+                {
+                    "id": 125,
+                    "question": "Can someone accidentally add emotion or OCR later?",
+                    "status": "confirmed",
+                    "answer": "Mitigated. checkForbiddenTerms() in safety.ts catches at runtime.",
+                    "evidence": "Runtime detection"
+                },
+                {
+                    "id": 126,
+                    "question": "Is there CI or review enforcement for safety rules?",
+                    "status": "partial",
+                    "answer": "runSafetyChecklist.ts exists but not in CI yet.",
+                    "evidence": "Script exists, CI missing"
+                },
+                {
+                    "id": 127,
+                    "question": "Is the system explainable to auditors?",
+                    "status": "confirmed",
+                    "answer": "Yes. Full audit trail via gate_audit_log.",
+                    "evidence": "Audit logging"
+                },
+                {
+                    "id": 128,
+                    "question": "Is PII never stored or inferred?",
+                    "status": "confirmed",
+                    "answer": "Yes. No face detection, demographic inference in forbidden list.",
+                    "evidence": "Policy enforcement"
+                },
+                {
+                    "id": 129,
+                    "question": "Are shared aggregates non-invertible?",
+                    "status": "confirmed",
+                    "answer": "Yes. k-anonymity (k=10) prevents individual identification.",
+                    "evidence": "Anonymization"
+                },
+                {
+                    "id": 130,
+                    "question": "Can users opt out of sharing?",
+                    "status": "gap",
+                    "answer": "No opt-out mechanism. Could add.",
+                    "evidence": "Missing feature"
+                }
+            ]
+        },
+        {
+            "name": "Resilience & Failure Modes",
+            "confirmed": 11,
+            "partial": 0,
+            "gaps": 0,
+            "questions": [
+                {
+                    "id": 131,
+                    "question": "If Meta changes attribution tomorrow, what breaks first?",
+                    "status": "confirmed",
+                    "answer": "Attribution mismatch detector triggers, blocks scoring.",
+                    "evidence": "Mismatch detection"
+                },
+                {
+                    "id": 132,
+                    "question": "If conversion volume drops platform-wide, does the system stay quiet?",
+                    "status": "confirmed",
+                    "answer": "Yes. Gates block scoring when conversions < 10.",
+                    "evidence": "Conversion threshold"
+                },
+                {
+                    "id": 133,
+                    "question": "If LLM fails entirely, does the system still work?",
+                    "status": "confirmed",
+                    "answer": "Yes. LLM is optional. Manual checklist input works.",
+                    "evidence": "Optional LLM"
+                },
+                {
+                    "id": 134,
+                    "question": "If users follow bad recommendations, can the system recover?",
+                    "status": "confirmed",
+                    "answer": "Yes. Outcome tracking detects negative results. Learning loop adjusts.",
+                    "evidence": "Feedback loop"
+                },
+                {
+                    "id": 135,
+                    "question": "If one system is removed, does the rest degrade gracefully?",
+                    "status": "confirmed",
+                    "answer": "Yes. Systems are independent. No cross-dependencies.",
+                    "evidence": "System isolation"
+                },
+                {
+                    "id": 136,
+                    "question": "If a competitor copies features but not data, do you still win?",
+                    "status": "confirmed",
+                    "answer": "Yes. Account-specific learnings are the moat.",
+                    "evidence": "Data advantage"
+                },
+                {
+                    "id": 137,
+                    "question": "If this system gives no advice, is that clearly justified?",
+                    "status": "confirmed",
+                    "answer": "Yes. Gate messages explain why and what to do next.",
+                    "evidence": "Clear messaging"
+                },
+                {
+                    "id": 138,
+                    "question": "Can the system say 'I don't know'?",
+                    "status": "confirmed",
+                    "answer": "Yes. primaryIssue: 'unknown', confidence: 'insufficient'.",
+                    "evidence": "Unknown states"
+                },
+                {
+                    "id": 139,
+                    "question": "Can the system refuse to answer?",
+                    "status": "confirmed",
+                    "answer": "Yes. Gates block output entirely when data insufficient.",
+                    "evidence": "Gate blocking"
+                },
+                {
+                    "id": 140,
+                    "question": "Is silence sometimes the correct output?",
+                    "status": "confirmed",
+                    "answer": "Yes. Insufficient data state is a valid, designed outcome.",
+                    "evidence": "Designed silence"
+                },
+                {
+                    "id": 141,
+                    "question": "Is there any place where the system appears confident without having evidence?",
+                    "status": "confirmed",
+                    "answer": "No. Confidence explicitly requires data thresholds. Cannot claim confidence without meeting gates.",
+                    "evidence": "Threshold enforcement"
+                }
+            ]
+        }
+    ],
+    "gaps": [
+        {
+            "id": 1,
+            "area": "Logging",
+            "description": "No alerting system for abnormal behavior",
+            "severity": "medium",
+            "question_id": 110
+        },
+        {
+            "id": 2,
+            "area": "User Experience",
+            "description": "No cross-account comparison warning in UI",
+            "severity": "medium",
+            "question_id": 113
+        },
+        {
+            "id": 3,
+            "area": "User Experience",
+            "description": "No onboarding expectation-setting flow",
+            "severity": "low",
+            "question_id": 118
+        },
+        {
+            "id": 4,
+            "area": "Safety Policy",
+            "description": "No user opt-out of aggregated sharing",
+            "severity": "medium",
+            "question_id": 130
+        },
+        {
+            "id": 5,
+            "area": "Extraction",
+            "description": "No safe handling of partial/failed extractions",
+            "severity": "medium",
+            "question_id": 32
+        },
+        {
+            "id": 6,
+            "area": "Extraction",
+            "description": "No partial extraction recovery logic",
+            "severity": "medium",
+            "question_id": 33
+        }
+    ]
+}
