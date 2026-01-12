@@ -5,13 +5,12 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
     Link2,
-    Save,
     RefreshCw,
     CheckCircle,
     AlertCircle,
-    ExternalLink,
     Loader2,
     Unlink,
+    Save,
 } from 'lucide-react';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -41,6 +40,7 @@ export default function SettingsPage() {
         pages: any[];
     } | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
 
     // Check for OAuth callback params
@@ -81,10 +81,19 @@ export default function SettingsPage() {
             }
 
             try {
-                // In a real app, fetch from your database
-                const stored = localStorage.getItem(`meta_integration_${user.id}`);
-                if (stored) {
-                    setMetaIntegration(JSON.parse(stored));
+                // Fetch from database via API
+                const response = await fetch(`/api/meta/integration?user_id=${user.id}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.integration) {
+                        setMetaIntegration({
+                            adAccountId: data.integration.ad_account_id,
+                            adAccountName: data.integration.ad_account_name || data.integration.ad_account_id,
+                            pageId: data.integration.page_id,
+                            pageName: data.integration.page_name,
+                            connectedAt: data.integration.updated_at,
+                        });
+                    }
                 }
             } catch (e) {
                 console.error('Error loading integration:', e);
@@ -102,36 +111,15 @@ export default function SettingsPage() {
             return;
         }
 
-        const appId = process.env.NEXT_PUBLIC_FB_APP_ID;
-        if (!appId) {
-            setError('Facebook App ID not configured');
-            return;
-        }
-
-        const redirectUri = `${window.location.origin}/api/auth/facebook/callback`;
-        const scopes = [
-            'ads_read',
-            'ads_management',
-            'pages_show_list',
-            'pages_read_engagement',
-            'leads_retrieval',
-            'pages_manage_metadata',
-        ].join(',');
-
-        const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&response_type=code&state=${user.id}`;
-
-        window.location.href = oauthUrl;
+        // Use the API route which handles ngrok URL properly
+        window.location.href = `/api/auth/facebook/start?user_id=${user.id}`;
     };
 
     const handleConnectSuccess = (data: MetaIntegration) => {
         setMetaIntegration(data);
         setShowConnectModal(false);
         setModalData(null);
-
-        // Store locally (in production, this is in the database)
-        if (user?.id) {
-            localStorage.setItem(`meta_integration_${user.id}`, JSON.stringify(data));
-        }
+        // Data is already saved to database via the modal's API call
     };
 
     const handleDisconnect = async () => {
@@ -139,9 +127,22 @@ export default function SettingsPage() {
             return;
         }
 
-        setMetaIntegration(null);
-        if (user?.id) {
-            localStorage.removeItem(`meta_integration_${user.id}`);
+        try {
+            // Disconnect via API
+            const response = await fetch('/api/meta/integration', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: user?.id }),
+            });
+
+            if (response.ok) {
+                setMetaIntegration(null);
+            } else {
+                setError('Failed to disconnect');
+            }
+        } catch (e) {
+            console.error('Error disconnecting:', e);
+            setError('Failed to disconnect');
         }
     };
 
@@ -149,6 +150,9 @@ export default function SettingsPage() {
         if (!user?.id) return;
 
         setSyncing(true);
+        setError(null);
+        setSuccess(null);
+
         try {
             const response = await fetch('/api/meta/import-ads', {
                 method: 'POST',
@@ -156,15 +160,19 @@ export default function SettingsPage() {
                 body: JSON.stringify({ user_id: user.id }),
             });
 
+            const data = await response.json();
+
             if (!response.ok) {
-                throw new Error('Sync failed');
+                throw new Error(data.error || 'Sync failed');
             }
 
-            const data = await response.json();
-            alert(`Synced: ${data.imported.campaigns} campaigns, ${data.imported.ads} ads`);
+            setSuccess(`Successfully synced ${data.imported.campaigns} campaigns, ${data.imported.adSets} ad sets, and ${data.imported.ads} ads!`);
+
+            // Clear success message after 5 seconds
+            setTimeout(() => setSuccess(null), 5000);
         } catch (e) {
             console.error('Sync error:', e);
-            setError('Failed to sync ads');
+            setError(e instanceof Error ? e.message : 'Failed to sync ads');
         } finally {
             setSyncing(false);
         }
@@ -199,6 +207,24 @@ export default function SettingsPage() {
                         <button
                             onClick={() => setError(null)}
                             className="ml-auto text-red-400 hover:text-red-300"
+                        >
+                            ×
+                        </button>
+                    </motion.div>
+                )}
+
+                {/* Success Alert */}
+                {success && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-6 p-4 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-3"
+                    >
+                        <CheckCircle className="text-green-400" size={20} />
+                        <span className="text-green-400">{success}</span>
+                        <button
+                            onClick={() => setSuccess(null)}
+                            className="ml-auto text-green-400 hover:text-green-300"
                         >
                             ×
                         </button>
@@ -336,124 +362,7 @@ export default function SettingsPage() {
                         </div>
                     </GlassCard>
 
-                    {/* Webhook Settings */}
-                    <GlassCard className="p-6" delay={0.3}>
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h3 className="text-lg font-semibold">Webhook Configuration</h3>
-                                <p className="text-sm text-[var(--text-muted)]">Lead Ads and messaging webhooks</p>
-                            </div>
-                            <span className="badge badge-warning flex items-center gap-1">
-                                <AlertCircle size={12} />
-                                Needs ngrok
-                            </span>
-                        </div>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm text-[var(--text-secondary)] mb-2">Webhook URL</label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        className="input flex-1"
-                                        placeholder="https://your-ngrok-url.ngrok.io/api/webhook"
-                                        readOnly
-                                    />
-                                    <button className="btn-secondary">
-                                        <ExternalLink size={16} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm text-[var(--text-secondary)] mb-2">Verify Token</label>
-                                <input
-                                    type="text"
-                                    className="input"
-                                    defaultValue="TEST_TOKEN"
-                                    readOnly
-                                />
-                            </div>
-
-                            <div className="p-4 rounded-lg bg-[var(--accent-soft)] border border-[var(--accent-primary)]/20">
-                                <p className="text-sm text-[var(--accent-primary)]">
-                                    💡 Run <code className="bg-[var(--glass-bg)] px-2 py-1 rounded">ngrok http 3000</code> to
-                                    get a public URL for your webhook, then update the Facebook Developer Console.
-                                </p>
-                            </div>
-                        </div>
-                    </GlassCard>
-
-                    {/* AI Configuration */}
-                    <GlassCard className="p-6" delay={0.4}>
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h3 className="text-lg font-semibold">AI Configuration</h3>
-                                <p className="text-sm text-[var(--text-muted)]">NVIDIA API settings for creative analysis</p>
-                            </div>
-                            <span className="badge badge-success flex items-center gap-1">
-                                <CheckCircle size={12} />
-                                Connected
-                            </span>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm text-[var(--text-secondary)] mb-2">NVIDIA API Key</label>
-                                <input
-                                    type="password"
-                                    className="input"
-                                    placeholder="nvapi-..."
-                                    defaultValue="••••••••••••"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm text-[var(--text-secondary)] mb-2">Model</label>
-                                <select className="input">
-                                    <option>GPT OSS 120B</option>
-                                    <option>Llama 3.1 Nemotron 70B</option>
-                                </select>
-                            </div>
-
-                            <button className="btn-primary flex items-center gap-2">
-                                <Save size={16} />
-                                Save AI Settings
-                            </button>
-                        </div>
-                    </GlassCard>
-
-                    {/* Cron Jobs */}
-                    <GlassCard className="p-6" delay={0.5}>
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h3 className="text-lg font-semibold">Automation & Cron Jobs</h3>
-                                <p className="text-sm text-[var(--text-muted)]">Scheduled tasks via cron-job.org</p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="p-4 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="font-medium">Meta Ads Sync</span>
-                                    <span className="badge badge-success">Every 15 min</span>
-                                </div>
-                                <p className="text-sm text-[var(--text-muted)]">
-                                    Endpoint: <code>/api/cron</code>
-                                </p>
-                            </div>
-
-                            <div className="p-4 rounded-lg bg-[var(--accent-soft)] border border-[var(--accent-primary)]/20">
-                                <p className="text-sm text-[var(--accent-primary)]">
-                                    🔧 Configure at <a href="https://cron-job.org" target="_blank" rel="noopener" className="underline">cron-job.org</a>:
-                                    <br />
-                                    URL: <code>https://your-app-url/api/cron</code>
-                                    <br />
-                                    Header: <code>x-cron-secret: athena-cron-secret-key-2026</code>
-                                </p>
-                            </div>
-                        </div>
-                    </GlassCard>
                 </div>
             </main>
 

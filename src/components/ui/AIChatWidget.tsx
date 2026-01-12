@@ -28,35 +28,11 @@ interface SearchResult {
     metric?: string;
 }
 
-// Simulated search data
-const mockLeads = [
-    { id: 'l1', name: 'John Smith', email: 'john@example.com', status: 'new', value: 5000 },
-    { id: 'l2', name: 'Sarah Johnson', email: 'sarah@company.com', status: 'contacted', value: 12000 },
-    { id: 'l3', name: 'Mike Chen', email: 'mike@startup.io', status: 'qualified', value: 8500 },
-    { id: 'l4', name: 'Emily Davis', email: 'emily@tech.co', status: 'converted', value: 25000 },
-];
-
-const mockCampaigns = [
-    { id: 'c1', name: 'Summer Sale', spend: 15000, roas: 4.2 },
-    { id: 'c2', name: 'Winter Promo', spend: 8000, roas: 3.1 },
-    { id: 'c3', name: 'Spring Launch', spend: 22000, roas: 5.5 },
-    { id: 'c4', name: 'Holiday Special', spend: 18000, roas: 2.8 },
-];
-
-const mockCreatives = [
-    { id: 'cr1', name: 'Video Ad - Product Demo', ctr: 4.2, roas: 5.1 },
-    { id: 'cr2', name: 'Carousel - Features', ctr: 3.1, roas: 3.8 },
-    { id: 'cr3', name: 'Image - Testimonial', ctr: 2.8, roas: 4.2 },
-    { id: 'cr4', name: 'Reel - Behind Scenes', ctr: 5.5, roas: 6.2 },
-];
-
-const mockUsers = [
-    { id: 'u1', name: 'Admin User', email: 'admin@athena.io', role: 'admin', campaigns: 12 },
-    { id: 'u2', name: 'Marketing Manager', email: 'marketing@company.com', role: 'manager', campaigns: 8 },
-    { id: 'u3', name: 'Creative Director', email: 'creative@agency.co', role: 'user', campaigns: 15 },
-    { id: 'u4', name: 'Growth Lead', email: 'growth@startup.io', role: 'user', campaigns: 6 },
-    { id: 'u5', name: 'Demo User', email: 'demo@test.com', role: 'demo', campaigns: 3 },
-];
+// Data arrays - TODO: fetch from APIs instead of mock data
+const mockLeads: { id: string; name: string; email: string; status: string; value: number }[] = [];
+const mockCampaigns: { id: string; name: string; spend: number; roas: number }[] = [];
+const mockCreatives: { id: string; name: string; ctr: number; roas: number }[] = [];
+const mockUsers: { id: string; name: string; email: string; role: string; campaigns: number }[] = [];
 
 const quickQuestions = [
     { icon: TrendingUp, text: 'What are my top performing campaigns?' },

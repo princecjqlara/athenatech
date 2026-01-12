@@ -6,7 +6,7 @@ import { OrbitControls, Stars, Html, Line, Points } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, User, EyeOff, X, Layers, Info } from 'lucide-react';
+import { Search, X, Info } from 'lucide-react';
 import Image from 'next/image';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -50,91 +50,14 @@ interface PositionedOrb {
     imageUrl?: string;        // Creative preview thumbnail
 }
 
-interface SearchResult {
-    id: string;
-    email: string;
-    full_name: string;
-}
-
-// ============ GENERATE 50 DUMMY CAMPAIGNS ============
-function generateDemoHierarchy(): HierarchyNode {
-    const campaignNames = [
-        'Summer Sale', 'Winter Promo', 'Spring Launch', 'Fall Collection', 'Holiday Special',
-        'Flash Sale', 'Clearance', 'New Arrivals', 'Best Sellers', 'Limited Edition',
-        'Brand Awareness', 'Retargeting', 'Lookalike', 'Interest Based', 'Broad Reach',
-        'Video Views', 'Engagement', 'Conversions', 'Lead Gen', 'App Install',
-        'Product Launch', 'Seasonal', 'Weekend Deal', 'Members Only', 'VIP Access',
-        'Early Bird', 'Last Chance', 'Bundle Deal', 'Buy One Get One', 'Free Shipping',
-        'First Time Buyer', 'Win Back', 'Cross Sell', 'Upsell', 'Loyalty',
-        'Influencer', 'UGC Campaign', 'Testimonial', 'Demo Video', 'Tutorial',
-        'FAQ Awareness', 'Problem Solution', 'Lifestyle', 'Premium', 'Budget',
-        'Mobile Only', 'Desktop Only', 'All Platforms', 'Social Only', 'Search Only'
-    ];
-
-    const adsetNames = ['Interest', 'Lookalike', 'Broad', 'Retarget', 'Custom', 'Engaged', 'Buyers', 'Viewers'];
-    const creativeNames = ['Video', 'Image', 'Carousel', 'Story', 'Reel', 'Collection', 'Instant'];
-
-    const campaigns: HierarchyNode[] = [];
-
-    for (let i = 0; i < 5; i++) {
-        const campaignRoas = 0.5 + Math.random() * 7;
-        const numAdSets = 1 + Math.floor(Math.random() * 3); // 1-3 ad sets
-
-        const adsets: HierarchyNode[] = [];
-        for (let j = 0; j < numAdSets; j++) {
-            const adsetRoas = campaignRoas * (0.7 + Math.random() * 0.6);
-            const numCreatives = 1 + Math.floor(Math.random() * 3); // 1-3 creatives
-
-            const creatives: HierarchyNode[] = [];
-            for (let k = 0; k < numCreatives; k++) {
-                creatives.push({
-                    id: `cr-${i}-${j}-${k}`,
-                    name: creativeNames[k % creativeNames.length],
-                    type: 'creative',
-                    metrics: { ctr: parseFloat((0.5 + Math.random() * 5).toFixed(1)), roas: parseFloat((adsetRoas * (0.8 + Math.random() * 0.4)).toFixed(1)) },
-                    children: [],
-                });
-            }
-
-            adsets.push({
-                id: `adset-${i}-${j}`,
-                name: adsetNames[j % adsetNames.length],
-                type: 'adset',
-                metrics: { spend: Math.floor(1000 + Math.random() * 9000), roas: parseFloat(adsetRoas.toFixed(1)) },
-                children: creatives,
-            });
-        }
-
-        campaigns.push({
-            id: `camp-${i}`,
-            name: campaignNames[i % campaignNames.length],
-            type: 'campaign',
-            metrics: { spend: Math.floor(5000 + Math.random() * 20000), roas: parseFloat(campaignRoas.toFixed(1)) },
-            children: adsets,
-        });
-    }
-
-    return {
-        id: 'account',
-        name: 'Ad Account',
-        type: 'account',
-        metrics: { spend: campaigns.reduce((s, c) => s + (c.metrics.spend || 0), 0) },
-        children: campaigns,
-    };
-}
-
-const demoHierarchy = generateDemoHierarchy();
-
-const getOtherUserHierarchy = (name: string): HierarchyNode => ({
-    id: 'other-account',
-    name: `${name}'s Account`,
+// Empty hierarchy for when no data is available
+const emptyHierarchy: HierarchyNode = {
+    id: 'account',
+    name: 'Ad Account',
     type: 'account',
-    metrics: {},
-    children: [
-        { id: 'oc1', name: 'Campaign 1', type: 'campaign', metrics: {}, children: [] },
-        { id: 'oc2', name: 'Campaign 2', type: 'campaign', metrics: {}, children: [] },
-    ]
-});
+    metrics: { spend: 0 },
+    children: [],
+};
 
 // ============ COLORS ============
 const typeColors: Record<string, string> = {
@@ -861,40 +784,31 @@ interface SceneProps {
 function Scene({ hierarchy, transitioning, showSuggestions, performanceFilter, onOrbClick, orbSearchQuery = '' }: SceneProps) {
     const [time, setTime] = useState(0);
 
-    const { orbs, suggestions, config, similarityConnections } = useMemo(() => {
+    const { orbs, config, similarityConnections } = useMemo(() => {
         const campaigns = hierarchy.children;
         const totalOrbs = 1 + countDescendants(hierarchy);
         const config = getAdaptiveConfig(campaigns.length, totalOrbs);
         const orbs = buildOrbs(hierarchy);
-        const suggestions = generateSuggestions(orbs, config);
+        // Suggestions disabled
         const similarityConnections = findSimilarCreatives(orbs);
-        return { orbs, suggestions, config, similarityConnections };
+        return { orbs, config, similarityConnections };
     }, [hierarchy]);
 
-    // Apply filters
+    // Apply filters - suggestions removed
     const filteredOrbs = useMemo(() => {
-        // Handle "Suggestions Only" filter first
-        if (performanceFilter === 'suggestions') {
-            // Show account + suggestions only
-            return [orbs.find(o => o.type === 'account')!, ...suggestions];
-        }
-
         // Handle "Campaigns Only" filter
         if (performanceFilter === 'campaigns') {
             return orbs.filter(o => o.type === 'account' || o.type === 'campaign');
         }
 
         let result = [...orbs];
-        if (showSuggestions) {
-            result = [...result, ...suggestions];
-        }
         if (performanceFilter === 'winners') {
             result = result.filter(o => o.isWinner || o.type === 'account');
         } else if (performanceFilter === 'losers') {
             result = result.filter(o => o.isLoser || o.type === 'account');
         }
         return result;
-    }, [orbs, suggestions, showSuggestions, performanceFilter]);
+    }, [orbs, performanceFilter]);
 
     // Apply orb search filter to highlight matching orbs
     const searchFilteredOrbs = useMemo(() => {
@@ -967,11 +881,7 @@ function Scene({ hierarchy, transitioning, showSuggestions, performanceFilter, o
 // ============ PAGE ============
 export default function AlgorithmPage() {
     const { profile } = useAuth();
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-    const [selectedUser, setSelectedUser] = useState<SearchResult | null>(null);
-    const [searching, setSearching] = useState(false);
-    const [showSearch, setShowSearch] = useState(false);
+    // Filter controls state only - user search removed
     const [transitioning, setTransitioning] = useState(false);
 
     // Filter controls
@@ -982,14 +892,125 @@ export default function AlgorithmPage() {
     const [showOrbSearchDropdown, setShowOrbSearchDropdown] = useState(false);
     const [mounted, setMounted] = useState(false);
 
+    // Real data state
+    const [realHierarchy, setRealHierarchy] = useState<HierarchyNode | null>(null);
+    const [dataLoading, setDataLoading] = useState(true);
+
     // Prevent hydration mismatch - only render after mount
     useEffect(() => {
         setMounted(true);
     }, []);
 
+    // Fetch real campaign data from API
+    useEffect(() => {
+        const fetchCampaigns = async () => {
+            if (!profile?.id) {
+                setDataLoading(false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/meta/campaigns?user_id=${profile.id}`);
+                if (!response.ok) throw new Error('Failed to fetch campaigns');
+
+                const data = await response.json();
+
+                if (data.connected && data.campaigns && data.campaigns.length > 0) {
+                    // Transform API data to HierarchyNode structure
+                    const campaigns: HierarchyNode[] = data.campaigns.map((campaign: {
+                        id: string;
+                        name: string;
+                        daily_budget?: number;
+                        lifetime_budget?: number;
+                        status?: string;
+                        adsets?: Array<{
+                            id: string;
+                            name: string;
+                            daily_budget?: number;
+                            ads?: Array<{
+                                id: string;
+                                name: string;
+                                spend?: number;
+                                impressions?: number;
+                                clicks?: number;
+                                ctr?: number;
+                                conversions?: number;
+                            }>;
+                        }>;
+                    }) => {
+                        const adsets: HierarchyNode[] = (campaign.adsets || []).map((adset) => {
+                            const ads: HierarchyNode[] = (adset.ads || []).map((ad) => ({
+                                id: ad.id,
+                                name: ad.name,
+                                type: 'creative' as const,
+                                metrics: {
+                                    spend: ad.spend || 0,
+                                    impressions: ad.impressions || 0,
+                                    ctr: ad.ctr || 0,
+                                    conversions: ad.conversions || 0,
+                                    roas: ad.spend && ad.spend > 0 ? (ad.conversions || 0) * 50 / ad.spend : 0,
+                                },
+                                children: [],
+                            }));
+
+                            const adsetSpend = ads.reduce((sum, ad) => sum + (ad.metrics.spend || 0), 0);
+                            const adsetConversions = ads.reduce((sum, ad) => sum + (ad.metrics.conversions || 0), 0);
+
+                            return {
+                                id: adset.id,
+                                name: adset.name,
+                                type: 'adset' as const,
+                                metrics: {
+                                    spend: adsetSpend,
+                                    roas: adsetSpend > 0 ? adsetConversions * 50 / adsetSpend : 0,
+                                },
+                                children: ads,
+                            };
+                        });
+
+                        const campaignSpend = adsets.reduce((sum, a) => sum + (a.metrics.spend || 0), 0);
+                        const campaignConversions = adsets.reduce((sum, a) =>
+                            sum + a.children.reduce((s2, ad) => s2 + (ad.metrics.conversions || 0), 0), 0);
+
+                        return {
+                            id: campaign.id,
+                            name: campaign.name,
+                            type: 'campaign' as const,
+                            metrics: {
+                                spend: campaignSpend,
+                                roas: campaignSpend > 0 ? campaignConversions * 50 / campaignSpend : 0,
+                            },
+                            children: adsets,
+                        };
+                    });
+
+                    const totalSpend = campaigns.reduce((sum, c) => sum + (c.metrics.spend || 0), 0);
+
+                    setRealHierarchy({
+                        id: 'account',
+                        name: 'Ad Account',
+                        type: 'account',
+                        metrics: { spend: totalSpend },
+                        children: campaigns,
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching campaigns for algorithm:', error);
+            } finally {
+                setDataLoading(false);
+            }
+        };
+
+        fetchCampaigns();
+    }, [profile?.id]);
+
     const hierarchy = useMemo(() => {
-        return selectedUser ? getOtherUserHierarchy(selectedUser.full_name || selectedUser.email.split('@')[0]) : demoHierarchy;
-    }, [selectedUser]);
+        // Use real synced data if available, otherwise empty hierarchy
+        if (realHierarchy && realHierarchy.children.length > 0) {
+            return realHierarchy;
+        }
+        return emptyHierarchy;
+    }, [realHierarchy]);
 
     const stats = useMemo(() => {
         const campaigns = hierarchy.children.length;
@@ -1016,29 +1037,7 @@ export default function AlgorithmPage() {
         return results.slice(0, 6);
     }, [hierarchy, orbSearchQuery]);
 
-    async function handleSearch(q: string) {
-        setSearchQuery(q);
-        if (q.length < 2) { setSearchResults([]); return; }
-        setSearching(true);
-        const dummy: SearchResult = { id: 'demo', email: 'test@demo.com', full_name: 'Test User' };
-        const { data } = await supabase.from('profiles').select('id, email, full_name').or(`email.ilike.%${q}%,full_name.ilike.%${q}%`).neq('id', profile?.id || '').limit(4);
-        const res = [...(data || [])];
-        if ('test'.includes(q.toLowerCase()) || 'demo'.includes(q.toLowerCase())) res.unshift(dummy);
-        setSearchResults(res.slice(0, 5));
-        setSearching(false);
-    }
-
-    function selectUser(u: SearchResult) {
-        setTransitioning(true);
-        setTimeout(() => { setSelectedUser(u); setSearchQuery(''); setSearchResults([]); setShowSearch(false); }, 600);
-        setTimeout(() => setTransitioning(false), 1500);
-    }
-
-    function clearSelection() {
-        setTransitioning(true);
-        setTimeout(() => setSelectedUser(null), 600);
-        setTimeout(() => setTransitioning(false), 1500);
-    }
+    // User search functions removed - only showing current user's data
 
     return (
         <div className="flex">
@@ -1079,41 +1078,7 @@ export default function AlgorithmPage() {
                     </GlassCard>
                 </motion.div>
 
-                {/* Search */}
-                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="absolute top-6 right-6 z-10">
-                    <GlassCard className="p-3 min-w-[220px]">
-                        {selectedUser ? (
-                            <div>
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-2">
-                                        <User size={12} className="text-[var(--accent-primary)]" />
-                                        <span className="text-sm font-medium">{selectedUser.full_name || selectedUser.email}</span>
-                                    </div>
-                                    <button onClick={clearSelection} className="btn-icon w-5 h-5"><X size={10} /></button>
-                                </div>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={12} />
-                                    <input type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)} onFocus={() => setShowSearch(true)} placeholder="Search..." className="input pl-7 text-xs py-1.5" />
-                                </div>
-                                <AnimatePresence>
-                                    {showSearch && searchResults.length > 0 && (
-                                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-2 space-y-1">
-                                            {searchResults.map(u => (
-                                                <button key={u.id} onClick={() => selectUser(u)} className="w-full flex items-center gap-2 p-1.5 rounded hover:bg-[var(--accent-soft)] text-left">
-                                                    <User size={10} className="text-[var(--text-muted)]" />
-                                                    <span className="text-xs">{u.full_name || u.email}</span>
-                                                </button>
-                                            ))}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </>
-                        )}
-                    </GlassCard>
-                </motion.div>
+
 
                 {/* Legend */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="absolute bottom-20 right-6 z-10">
@@ -1181,15 +1146,6 @@ export default function AlgorithmPage() {
                             </AnimatePresence>
                         </div>
                         <div className="w-px h-4 bg-[var(--border-subtle)]" />
-                        <label className="flex items-center gap-2 text-xs cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={showSuggestions}
-                                onChange={e => setShowSuggestions(e.target.checked)}
-                                className="accent-[var(--accent-primary)]"
-                            />
-                            <span>💡 Suggestions</span>
-                        </label>
                         <select
                             value={performanceFilter}
                             onChange={e => setPerformanceFilter(e.target.value as typeof performanceFilter)}
@@ -1197,7 +1153,6 @@ export default function AlgorithmPage() {
                             style={{ backgroundColor: '#1a2a2a' }}
                         >
                             <option value="all">🌐 All Orbs</option>
-                            <option value="suggestions">💡 Suggestions Only</option>
                             <option value="campaigns">📊 Campaigns Only</option>
                             <option value="winners">🏆 Winners Only</option>
                             <option value="losers">⚠️ Losers Only</option>
@@ -1283,7 +1238,36 @@ export default function AlgorithmPage() {
 
                 {/* Canvas */}
                 <div className="w-full h-screen">
-                    <Canvas camera={{ position: [0, 20, 35], fov: 50 }} gl={{ antialias: true, alpha: true }} style={{ background: 'linear-gradient(135deg, #0a1a1a 0%, #0d2d2d 50%, #0a1f1f 100%)' }}>
+                    <Canvas
+                        camera={{ position: [0, 20, 35], fov: 50 }}
+                        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false }}
+                        style={{ background: 'linear-gradient(135deg, #0a1a1a 0%, #0d2d2d 50%, #0a1f1f 100%)' }}
+                        onCreated={({ gl }) => {
+                            // Handle WebGL context loss
+                            gl.domElement.addEventListener('webglcontextlost', (event) => {
+                                event.preventDefault();
+                                console.warn('WebGL context lost. Please close other tabs and refresh.');
+                            });
+                        }}
+                        fallback={
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0a1a1a] to-[#0d2d2d]">
+                                <div className="text-center p-8">
+                                    <div className="text-4xl mb-4">⚠️</div>
+                                    <h3 className="text-xl font-bold text-white mb-2">WebGL Error</h3>
+                                    <p className="text-[var(--text-muted)] mb-4">
+                                        Unable to create 3D context.<br />
+                                        Please close other tabs and refresh the page.
+                                    </p>
+                                    <button
+                                        onClick={() => window.location.reload()}
+                                        className="btn-primary"
+                                    >
+                                        Refresh Page
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    >
                         <Suspense fallback={null}>
                             <Scene
                                 hierarchy={hierarchy}

@@ -24,11 +24,15 @@ import {
     GripVertical,
     Sparkles,
     Check,
-    RefreshCw
+    RefreshCw,
+    CheckSquare,
+    Square,
+    AlertTriangle
 } from 'lucide-react';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AIChatWidget } from '@/components/ui/AIChatWidget';
+import { useAuth } from '@/lib/auth';
 
 // Types
 interface Tag {
@@ -167,137 +171,12 @@ const availableTags: Tag[] = [
     { id: 'cold', name: 'Cold Lead', color: '#95A5A6' },
 ];
 
-// Dummy data with extended fields
-const dummyLeads: Lead[] = [
-    {
-        id: '1', name: 'John Smith', email: 'john@example.com', phone: '+1 555-0101',
-        status: 'new', source: 'Meta Ads', createdAt: '2026-01-09', value: 5000,
-        tags: [availableTags[0], availableTags[1]],
-        owner: 'Sales Team',
-        pageLink: 'https://facebook.com/business/123',
-        facebookId: 'fb_123456',
-        company: 'Smith Enterprises',
-        adAccountId: 'act_123456789',
-        adAccountName: 'Main Business Account',
-        campaignId: 'camp_001',
-        campaignName: 'Lead Gen - Premium',
-        adId: 'ad_001',
-        adName: 'Premium Package Video',
-        conversationContext: {
-            lastMessage: 'Hi, I\'m interested in your premium package',
-            lastMessageAt: '2026-01-09 14:30',
-            messageCount: 5,
-            aiSummary: 'Hot prospect interested in premium. Asked about pricing and timeline. Ready to schedule demo.',
-            sentiment: 'positive',
-            intent: 'Purchase premium package',
-            topics: ['Pricing', 'Timeline', 'Demo', 'Premium Features'],
-            nextAction: 'Schedule demo call within 24 hours',
-            engagementScore: 85,
-            painPoints: ['Current solution too slow', 'Needs better reporting'],
-            objections: ['Budget approval needed']
-        },
-        extraDetails: {
-            age: 35,
-            occupation: 'Marketing Director',
-            income: '$80k-$100k',
-            interests: ['Digital Marketing', 'SaaS Tools', 'Automation'],
-            preferredContact: 'email',
-            timezone: 'PST',
-            language: 'English',
-            customFields: [
-                { label: 'Decision Maker', value: 'Yes' },
-                { label: 'Team Size', value: '10-25' }
-            ]
-        }
-    },
-    {
-        id: '2', name: 'Sarah Johnson', email: 'sarah@company.com', phone: '+1 555-0102',
-        status: 'contacted', source: 'Website', createdAt: '2026-01-08', value: 12000,
-        tags: [availableTags[2]],
-        owner: 'Maria Garcia',
-        company: 'Johnson & Co',
-        lastContactedAt: '2026-01-09 10:00',
-        conversationContext: {
-            lastMessage: 'Thanks for the call, I\'ll review the proposal',
-            lastMessageAt: '2026-01-08 16:45',
-            messageCount: 12,
-            aiSummary: 'In decision phase. Comparing with competitors. Follow up next week.'
-        }
-    },
-    {
-        id: '3', name: 'Mike Chen', email: 'mike@startup.io', phone: '+1 555-0103',
-        status: 'qualified', source: 'Meta Ads', createdAt: '2026-01-07', value: 8500,
-        tags: [availableTags[3], availableTags[4]],
-        owner: 'John Doe',
-        pageLink: 'https://facebook.com/business/456',
-        company: 'Chen Startup',
-        address: '123 Tech Blvd, Silicon Valley',
-        conversationContext: {
-            lastMessage: 'Demo was great! Sending contracts tomorrow',
-            lastMessageAt: '2026-01-07 11:00',
-            messageCount: 25,
-            aiSummary: 'Very engaged. Demo completed successfully. Waiting for contract review.'
-        }
-    },
-    {
-        id: '4', name: 'Emily Davis', email: 'emily@tech.co', phone: '+1 555-0104',
-        status: 'converted', source: 'Referral', createdAt: '2026-01-06', value: 25000,
-        tags: [availableTags[1]],
-        owner: 'Maria Garcia',
-        company: 'Davis Tech',
-        notes: 'Premium customer - referred by Mike Chen',
-        conversationContext: {
-            lastMessage: 'Payment confirmed. Looking forward to onboarding!',
-            lastMessageAt: '2026-01-06 09:15',
-            messageCount: 45,
-            aiSummary: 'Completed purchase of premium package. High satisfaction. Potential for upsell.'
-        }
-    },
-    {
-        id: '5', name: 'Alex Wilson', email: 'alex@agency.com', phone: '+1 555-0105',
-        status: 'lost', source: 'Meta Ads', createdAt: '2026-01-05', value: 3000,
-        tags: [availableTags[5]],
-        owner: 'Sales Team',
-        conversationContext: {
-            lastMessage: 'Budget constraints, maybe next quarter',
-            lastMessageAt: '2026-01-05 13:30',
-            messageCount: 8,
-            aiSummary: 'Lost due to budget. Re-engage in Q2. Expressed continued interest.'
-        }
-    },
-    {
-        id: '6', name: 'Lisa Brown', email: 'lisa@brand.com', phone: '+1 555-0106',
-        status: 'new', source: 'Website', createdAt: '2026-01-04', value: 7500,
-        owner: 'Sales Team',
-        company: 'Brown Brands',
-        conversationContext: {
-            lastMessage: 'Just filled the contact form',
-            lastMessageAt: '2026-01-04 08:00',
-            messageCount: 1,
-        }
-    },
-    {
-        id: '7', name: 'David Lee', email: 'david@corp.com', phone: '+1 555-0107',
-        status: 'contacted', source: 'Meta Ads', createdAt: '2026-01-03', value: 15000,
-        tags: [availableTags[0], availableTags[2]],
-        owner: 'John Doe',
-        pageLink: 'https://facebook.com/business/789',
-        company: 'Lee Corporation',
-        conversationContext: {
-            lastMessage: 'Can we schedule a call for tomorrow?',
-            lastMessageAt: '2026-01-03 17:00',
-            messageCount: 7,
-            aiSummary: 'Active engagement. Scheduling call. High-value enterprise prospect.'
-        }
-    },
-];
-
 const createInitialPipelineStages = (): PipelineStage[] => [
-    { id: 'new', name: 'New Leads', color: '#87CEEB', leads: dummyLeads.filter(l => l.status === 'new'), events: getDefaultEventsForStage('new') },
-    { id: 'contacted', name: 'Contacted', color: '#FFD580', leads: dummyLeads.filter(l => l.status === 'contacted'), events: getDefaultEventsForStage('contacted') },
-    { id: 'qualified', name: 'Qualified', color: '#90EE90', leads: dummyLeads.filter(l => l.status === 'qualified'), events: getDefaultEventsForStage('qualified') },
-    { id: 'converted', name: 'Converted', color: '#98FB98', leads: dummyLeads.filter(l => l.status === 'converted'), events: getDefaultEventsForStage('converted') },
-    { id: 'lost', name: 'Lost', color: '#FFB6C1', leads: dummyLeads.filter(l => l.status === 'lost'), events: getDefaultEventsForStage('lost') },
+    { id: 'new', name: 'New Leads', color: '#87CEEB', leads: [], events: getDefaultEventsForStage('new') },
+    { id: 'contacted', name: 'Contacted', color: '#FFD580', leads: [], events: getDefaultEventsForStage('contacted') },
+    { id: 'qualified', name: 'Qualified', color: '#90EE90', leads: [], events: getDefaultEventsForStage('qualified') },
+    { id: 'converted', name: 'Converted', color: '#98FB98', leads: [], events: getDefaultEventsForStage('converted') },
+    { id: 'lost', name: 'Lost', color: '#FFB6C1', leads: [], events: getDefaultEventsForStage('lost') },
 ];
 
 const statusColors: Record<Lead['status'], string> = {
@@ -1217,6 +1096,7 @@ function DraggableLeadCard({
 }
 
 export default function LeadsPage() {
+    const { profile } = useAuth();
     const [activeTab, setActiveTab] = useState<'leads' | 'pipelines'>('leads');
     const [searchQuery, setSearchQuery] = useState('');
     const [pipelineSearchQuery, setPipelineSearchQuery] = useState('');
@@ -1250,15 +1130,57 @@ export default function LeadsPage() {
     // Edit/Delete Lead
     const [editingLead, setEditingLead] = useState<Lead | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<Lead | null>(null);
-    const [allLeads, setAllLeads] = useState<Lead[]>(dummyLeads);
+    const [allLeads, setAllLeads] = useState<Lead[]>([]);
+    const [leadsLoading, setLeadsLoading] = useState(true);
+
+    // Bulk Delete State
+    const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+    const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
     // AI Activity Log
-    const [aiActivityLog, setAiActivityLog] = useState<AIActivityLog[]>([
-        { id: '1', timestamp: '2026-01-09 14:35', action: 'message_analysis', leadId: '1', leadName: 'John Smith', details: 'Analyzed new message: High purchase intent detected' },
-        { id: '2', timestamp: '2026-01-09 10:15', action: 'stage_transfer', leadId: '2', leadName: 'Sarah Johnson', details: 'AI moved lead forward', fromValue: 'New', toValue: 'Contacted' },
-        { id: '3', timestamp: '2026-01-08 16:50', action: 'tag_added', leadId: '7', leadName: 'David Lee', details: 'Added tag: Hot Lead', toValue: 'Hot Lead' },
-    ]);
+    const [aiActivityLog, setAiActivityLog] = useState<AIActivityLog[]>([]);
     const [showAiHistory, setShowAiHistory] = useState(false);
+
+    // Fetch leads from database on mount
+    useEffect(() => {
+        const fetchLeads = async () => {
+            if (!profile?.id) {
+                setLeadsLoading(false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/meta/leads?user_id=${profile.id}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const leads: Lead[] = (data.leads || []).map((lead: Record<string, unknown>) => ({
+                        id: lead.id as string,
+                        name: (lead.name as string) || 'Unknown',
+                        email: (lead.email as string) || '',
+                        phone: (lead.phone as string) || '',
+                        status: (lead.status as Lead['status']) || 'new',
+                        source: 'Meta Lead Ads',
+                        createdAt: lead.created_time ? new Date(lead.created_time as string).toLocaleDateString() : new Date().toLocaleDateString(),
+                        value: 0,
+                        campaignId: lead.campaign_id as string | undefined,
+                        adId: lead.ad_id as string | undefined,
+                    }));
+                    setAllLeads(leads);
+                    // Update pipeline stages with fetched leads
+                    setPipelineStages(stages => stages.map(s => ({
+                        ...s,
+                        leads: leads.filter(l => l.status === s.id)
+                    })));
+                }
+            } catch (error) {
+                console.error('Error fetching leads:', error);
+            } finally {
+                setLeadsLoading(false);
+            }
+        };
+        fetchLeads();
+    }, [profile?.id]);
 
     // Lead CRUD handlers
     const handleUpdateLead = (updatedLead: Lead) => {
@@ -1344,6 +1266,63 @@ export default function LeadsPage() {
         if (selectedLead?.id === leadId) {
             setSelectedLead(prev => prev ? { ...prev, tags: (prev.tags || []).filter(t => t.id !== tagId) } : null);
         }
+    };
+
+    // Bulk Delete Handlers
+    const toggleLeadSelection = (leadId: string, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        setSelectedLeadIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(leadId)) {
+                newSet.delete(leadId);
+            } else {
+                newSet.add(leadId);
+            }
+            return newSet;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedLeadIds.size === filteredLeads.length) {
+            setSelectedLeadIds(new Set());
+        } else {
+            setSelectedLeadIds(new Set(filteredLeads.map(l => l.id)));
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedLeadIds.size === 0) return;
+
+        setIsBulkDeleting(true);
+
+        // Remove leads locally
+        const idsToDelete = Array.from(selectedLeadIds);
+        const deletedLeadNames = allLeads.filter(l => idsToDelete.includes(l.id)).map(l => l.name);
+
+        setAllLeads(leads => leads.filter(l => !selectedLeadIds.has(l.id)));
+        setPipelineStages(stages => stages.map(s => ({
+            ...s,
+            leads: s.leads.filter(l => !selectedLeadIds.has(l.id))
+        })));
+
+        // Log AI activity
+        setAiActivityLog(log => [{
+            id: Date.now().toString(),
+            timestamp: new Date().toLocaleString(),
+            action: 'info_update',
+            leadId: 'bulk',
+            leadName: `${idsToDelete.length} leads`,
+            details: `Bulk deleted: ${deletedLeadNames.slice(0, 3).join(', ')}${deletedLeadNames.length > 3 ? ` and ${deletedLeadNames.length - 3} more` : ''}`,
+        }, ...log]);
+
+        // Clear selection and close modal
+        setSelectedLeadIds(new Set());
+        setShowBulkDeleteConfirm(false);
+        setIsBulkDeleting(false);
+    };
+
+    const clearSelection = () => {
+        setSelectedLeadIds(new Set());
     };
 
     // Load saved pipeline type from localStorage
@@ -1822,6 +1801,27 @@ export default function LeadsPage() {
                                 <table className="w-full">
                                     <thead>
                                         <tr className="border-b border-[var(--glass-border)]">
+                                            <th className="p-4 w-12">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.1 }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    onClick={toggleSelectAll}
+                                                    className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${selectedLeadIds.size === filteredLeads.length && filteredLeads.length > 0
+                                                        ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg shadow-red-500/30'
+                                                        : selectedLeadIds.size > 0
+                                                            ? 'bg-gradient-to-r from-red-500/50 to-rose-500/50 text-white'
+                                                            : 'bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-muted)] hover:border-red-500/50'
+                                                        }`}
+                                                >
+                                                    {selectedLeadIds.size === filteredLeads.length && filteredLeads.length > 0 ? (
+                                                        <CheckSquare size={14} />
+                                                    ) : selectedLeadIds.size > 0 ? (
+                                                        <div className="w-2 h-2 bg-white rounded-sm" />
+                                                    ) : (
+                                                        <Square size={14} />
+                                                    )}
+                                                </motion.button>
+                                            </th>
                                             <th className="text-left p-4 text-sm font-semibold text-[var(--text-secondary)]">
                                                 <div className="flex items-center gap-2 cursor-pointer hover:text-[var(--text-primary)]">
                                                     Name
@@ -1837,69 +1837,88 @@ export default function LeadsPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredLeads.map((lead, index) => (
-                                            <motion.tr
-                                                key={lead.id}
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: index * 0.05 }}
-                                                className="border-b border-[var(--glass-border)] hover:bg-[var(--accent-soft)] transition-colors cursor-pointer"
-                                                onClick={() => setSelectedLead(lead)}
-                                            >
-                                                <td className="p-4">
-                                                    <div className="font-medium">{lead.name}</div>
-                                                </td>
-                                                <td className="p-4">
-                                                    <div className="flex flex-col gap-1 text-sm">
-                                                        <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-                                                            <Mail size={14} />
-                                                            {lead.email}
+                                        {filteredLeads.map((lead, index) => {
+                                            const isSelected = selectedLeadIds.has(lead.id);
+                                            return (
+                                                <motion.tr
+                                                    key={lead.id}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: index * 0.05 }}
+                                                    className={`border-b border-[var(--glass-border)] transition-all cursor-pointer ${isSelected
+                                                        ? 'bg-red-500/10 hover:bg-red-500/15 border-l-2 border-l-red-500'
+                                                        : 'hover:bg-[var(--accent-soft)]'
+                                                        }`}
+                                                    onClick={() => setSelectedLead(lead)}
+                                                >
+                                                    <td className="p-4">
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.15 }}
+                                                            whileTap={{ scale: 0.85 }}
+                                                            onClick={(e) => toggleLeadSelection(lead.id, e)}
+                                                            className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${isSelected
+                                                                ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg shadow-red-500/30'
+                                                                : 'bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-muted)] hover:border-red-500/50 hover:text-red-400'
+                                                                }`}
+                                                        >
+                                                            {isSelected ? <Check size={14} /> : <Square size={14} />}
+                                                        </motion.button>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className="font-medium">{lead.name}</div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className="flex flex-col gap-1 text-sm">
+                                                            <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                                                                <Mail size={14} />
+                                                                {lead.email}
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                                                                <Phone size={14} />
+                                                                {lead.phone}
+                                                            </div>
                                                         </div>
-                                                        <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                                                            <Phone size={14} />
-                                                            {lead.phone}
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="p-4">
-                                                    <span
-                                                        className="px-3 py-1 rounded-full text-xs font-medium capitalize"
-                                                        style={{
-                                                            backgroundColor: `${statusColors[lead.status]}20`,
-                                                            color: statusColors[lead.status],
-                                                        }}
-                                                    >
-                                                        {lead.status}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-sm text-[var(--text-secondary)]">
-                                                    {lead.source}
-                                                </td>
-                                                <td className="p-4 text-sm font-medium">
-                                                    {lead.status === 'converted' && lead.value ? (
-                                                        <span className="text-[var(--accent-primary)]">
-                                                            ₱{lead.value.toLocaleString()}
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <span
+                                                            className="px-3 py-1 rounded-full text-xs font-medium capitalize"
+                                                            style={{
+                                                                backgroundColor: `${statusColors[lead.status]}20`,
+                                                                color: statusColors[lead.status],
+                                                            }}
+                                                        >
+                                                            {lead.status}
                                                         </span>
-                                                    ) : (
-                                                        <span className="text-[var(--text-muted)]">—</span>
-                                                    )}
-                                                </td>
-                                                <td className="p-4 text-sm text-[var(--text-muted)]">
-                                                    <div className="flex items-center gap-2">
-                                                        <Calendar size={14} />
-                                                        {lead.createdAt}
-                                                    </div>
-                                                </td>
-                                                <td className="p-4">
-                                                    <LeadDropdownMenu
-                                                        lead={lead}
-                                                        onViewDetails={() => setSelectedLead(lead)}
-                                                        onEdit={() => console.log('Edit lead:', lead.id)}
-                                                        onDelete={() => console.log('Delete lead:', lead.id)}
-                                                    />
-                                                </td>
-                                            </motion.tr>
-                                        ))}
+                                                    </td>
+                                                    <td className="p-4 text-sm text-[var(--text-secondary)]">
+                                                        {lead.source}
+                                                    </td>
+                                                    <td className="p-4 text-sm font-medium">
+                                                        {lead.status === 'converted' && lead.value ? (
+                                                            <span className="text-[var(--accent-primary)]">
+                                                                ₱{lead.value.toLocaleString()}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[var(--text-muted)]">—</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-4 text-sm text-[var(--text-muted)]">
+                                                        <div className="flex items-center gap-2">
+                                                            <Calendar size={14} />
+                                                            {lead.createdAt}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <LeadDropdownMenu
+                                                            lead={lead}
+                                                            onViewDetails={() => setSelectedLead(lead)}
+                                                            onEdit={() => setEditingLead(lead)}
+                                                            onDelete={() => setShowDeleteConfirm(lead)}
+                                                        />
+                                                    </td>
+                                                </motion.tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
 
@@ -1909,6 +1928,66 @@ export default function LeadsPage() {
                                     </div>
                                 )}
                             </GlassCard>
+
+                            {/* Floating Bulk Delete Action Bar */}
+                            <AnimatePresence>
+                                {selectedLeadIds.size > 0 && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 100, scale: 0.9 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 100, scale: 0.9 }}
+                                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40"
+                                    >
+                                        <div className="bg-gradient-to-r from-[#1a1a2e] to-[#16213e] border border-[var(--glass-border)] rounded-2xl shadow-2xl shadow-black/50 px-6 py-4 flex items-center gap-6 backdrop-blur-xl">
+                                            {/* Selection Count */}
+                                            <div className="flex items-center gap-3">
+                                                <motion.div
+                                                    initial={{ scale: 0 }}
+                                                    animate={{ scale: 1 }}
+                                                    className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white font-bold shadow-lg shadow-red-500/30"
+                                                >
+                                                    {selectedLeadIds.size}
+                                                </motion.div>
+                                                <div>
+                                                    <div className="font-semibold text-white">
+                                                        {selectedLeadIds.size === 1 ? 'Lead' : 'Leads'} Selected
+                                                    </div>
+                                                    <div className="text-xs text-[var(--text-muted)]">
+                                                        Ready for bulk action
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Divider */}
+                                            <div className="w-px h-10 bg-[var(--glass-border)]" />
+
+                                            {/* Actions */}
+                                            <div className="flex items-center gap-3">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={clearSelection}
+                                                    className="px-4 py-2 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-white hover:border-white/30 transition-all flex items-center gap-2"
+                                                >
+                                                    <X size={16} />
+                                                    Clear
+                                                </motion.button>
+
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(239, 68, 68, 0.4)" }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={() => setShowBulkDeleteConfirm(true)}
+                                                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 text-white font-medium shadow-lg shadow-red-500/30 hover:shadow-red-500/50 transition-all flex items-center gap-2"
+                                                >
+                                                    <Trash2 size={16} />
+                                                    Delete {selectedLeadIds.size} {selectedLeadIds.size === 1 ? 'Lead' : 'Leads'}
+                                                </motion.button>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </motion.div>
                     ) : (
                         <motion.div
@@ -2210,6 +2289,114 @@ export default function LeadsPage() {
                                     >
                                         Delete
                                     </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Bulk Delete Confirmation Modal */}
+                <AnimatePresence>
+                    {showBulkDeleteConfirm && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+                            onClick={() => setShowBulkDeleteConfirm(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.8, opacity: 0, y: 50 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.8, opacity: 0, y: 50 }}
+                                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                className="bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a] border border-red-500/30 rounded-3xl p-8 max-w-md w-full shadow-2xl"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {/* Animated Warning Icon */}
+                                <motion.div
+                                    initial={{ scale: 0, rotate: -180 }}
+                                    animate={{ scale: 1, rotate: 0 }}
+                                    transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
+                                    className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-500/40"
+                                >
+                                    <motion.div
+                                        animate={{
+                                            scale: [1, 1.1, 1],
+                                        }}
+                                        transition={{
+                                            duration: 1.5,
+                                            repeat: Infinity,
+                                            ease: "easeInOut"
+                                        }}
+                                    >
+                                        <AlertTriangle className="text-white" size={36} />
+                                    </motion.div>
+                                </motion.div>
+
+                                {/* Title */}
+                                <h3 className="text-2xl font-bold text-center mb-2 bg-gradient-to-r from-red-400 to-rose-400 bg-clip-text text-transparent">
+                                    Delete {selectedLeadIds.size} {selectedLeadIds.size === 1 ? 'Lead' : 'Leads'}?
+                                </h3>
+
+                                <p className="text-center text-[var(--text-muted)] mb-6">
+                                    This action is permanent and cannot be undone.
+                                </p>
+
+                                {/* Preview of leads to be deleted */}
+                                <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                                    <div className="text-xs text-red-400 font-semibold mb-2">LEADS TO BE DELETED:</div>
+                                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                                        {Array.from(selectedLeadIds).slice(0, 5).map(id => {
+                                            const lead = allLeads.find(l => l.id === id);
+                                            return lead ? (
+                                                <div key={id} className="flex items-center gap-2 text-sm">
+                                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-red-500/30 to-rose-500/30 flex items-center justify-center text-xs font-bold text-red-300">
+                                                        {lead.name.charAt(0)}
+                                                    </div>
+                                                    <span className="text-[var(--text-secondary)]">{lead.name}</span>
+                                                    <span className="text-[var(--text-muted)] text-xs">({lead.email})</span>
+                                                </div>
+                                            ) : null;
+                                        })}
+                                        {selectedLeadIds.size > 5 && (
+                                            <div className="text-xs text-[var(--text-muted)] pt-1">
+                                                ...and {selectedLeadIds.size - 5} more
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-4">
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => setShowBulkDeleteConfirm(false)}
+                                        disabled={isBulkDeleting}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-secondary)] hover:text-white hover:border-white/30 font-medium transition-all disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </motion.button>
+                                    <motion.button
+                                        whileHover={{ scale: 1.02, boxShadow: "0 0 40px rgba(239, 68, 68, 0.5)" }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={handleBulkDelete}
+                                        disabled={isBulkDeleting}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 text-white font-semibold shadow-lg shadow-red-500/30 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                                    >
+                                        {isBulkDeleting ? (
+                                            <>
+                                                <RefreshCw size={16} className="animate-spin" />
+                                                Deleting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Trash2 size={16} />
+                                                Delete All
+                                            </>
+                                        )}
+                                    </motion.button>
                                 </div>
                             </motion.div>
                         </motion.div>

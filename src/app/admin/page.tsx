@@ -87,7 +87,7 @@ export default function AdminPage() {
         }
 
         // In dev mode, the mock user doesn't exist in DB, so skip created_by
-        const isDevUser = profile.id === 'dev-user-001';
+        const isDevUser = profile.id === '00000000-0000-0000-0000-000000000001';
         const insertData: { code: string; created_by?: string } = { code };
         if (!isDevUser) {
             insertData.created_by = profile.id;

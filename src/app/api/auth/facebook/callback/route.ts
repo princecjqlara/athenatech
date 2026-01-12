@@ -16,29 +16,32 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
 
+    // Get the base URL for redirects (use ngrok URL in dev)
+    const appBaseUrl = process.env.NEXT_PUBLIC_NGROK_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+
     // Handle OAuth errors
     if (error) {
         console.error('[Facebook OAuth] Error:', error, errorDescription);
         return NextResponse.redirect(
-            new URL(`/settings?error=${encodeURIComponent(errorDescription || error)}`, request.url)
+            new URL(`/settings?error=${encodeURIComponent(errorDescription || error)}`, appBaseUrl)
         );
     }
 
     // Validate required parameters
     if (!code) {
         return NextResponse.redirect(
-            new URL('/settings?error=Missing%20authorization%20code', request.url)
+            new URL('/settings?error=Missing%20authorization%20code', appBaseUrl)
         );
     }
 
     if (!state) {
         return NextResponse.redirect(
-            new URL('/settings?error=Missing%20state%20parameter', request.url)
+            new URL('/settings?error=Missing%20state%20parameter', appBaseUrl)
         );
     }
 
     try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+        const baseUrl = process.env.NEXT_PUBLIC_NGROK_URL || process.env.NEXT_PUBLIC_APP_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
         const redirectUri = `${baseUrl}/api/auth/facebook/callback`;
 
         // Exchange code for access token
@@ -81,14 +84,14 @@ export async function GET(request: NextRequest) {
 
         // Redirect to settings page with selection modal open
         return NextResponse.redirect(
-            new URL(`/settings?meta_connect=true&${selectionParams.toString()}`, request.url)
+            new URL(`/settings?meta_connect=true&${selectionParams.toString()}`, appBaseUrl)
         );
 
     } catch (error) {
         console.error('[Facebook OAuth] Error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to connect';
         return NextResponse.redirect(
-            new URL(`/settings?error=${encodeURIComponent(errorMessage)}`, request.url)
+            new URL(`/settings?error=${encodeURIComponent(errorMessage)}`, appBaseUrl)
         );
     }
 }
@@ -125,27 +128,52 @@ export async function POST(request: NextRequest) {
             ? new Date(Date.now() + parseInt(token_expires_at) * 1000)
             : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days default
 
-        // Upsert integration record
-        const { data, error } = await supabase
+        // Build the integration data - only include columns that exist in schema
+        // Core columns from original schema.sql: user_id, access_token, token_expires_at, ad_account_id, page_id, pixel_id, is_active
+        const integrationData = {
+            access_token,
+            token_expires_at: expiresAt.toISOString(),
+            ad_account_id,
+            page_id: page_id || null,
+            is_active: true,
+            updated_at: new Date().toISOString(),
+        };
+
+        // Check if integration already exists for this user
+        const { data: existing } = await supabase
             .from('meta_integrations')
-            .upsert({
-                user_id,
-                access_token,
-                token_expires_at: expiresAt.toISOString(),
-                ad_account_id,
-                page_id: page_id || null,
-                is_active: true,
-                updated_at: new Date().toISOString(),
-            }, {
-                onConflict: 'user_id',
-            })
-            .select()
+            .select('id')
+            .eq('user_id', user_id)
             .single();
 
+        let data;
+        let error;
+
+        if (existing) {
+            // Update existing record
+            const result = await supabase
+                .from('meta_integrations')
+                .update(integrationData)
+                .eq('user_id', user_id)
+                .select()
+                .single();
+            data = result.data;
+            error = result.error;
+        } else {
+            // Insert new record
+            const result = await supabase
+                .from('meta_integrations')
+                .insert({ user_id, ...integrationData })
+                .select()
+                .single();
+            data = result.data;
+            error = result.error;
+        }
+
         if (error) {
-            console.error('[Facebook OAuth] Database error:', error);
+            console.error('[Facebook OAuth] Database error:', error.message, error.details, error.hint);
             return NextResponse.json(
-                { error: 'Failed to save integration' },
+                { error: `Failed to save integration: ${error.message}` },
                 { status: 500 }
             );
         }

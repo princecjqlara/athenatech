@@ -36,8 +36,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // ⚠️ DEV ONLY: Set to true to bypass authentication
 const DEV_BYPASS_AUTH = true;
 
+// Valid UUID for dev user - MUST exist in profiles table
+const DEV_USER_UUID = '00000000-0000-0000-0000-000000000001';
+
 const DEV_MOCK_PROFILE: UserProfile = {
-    id: 'dev-user-001',
+    id: DEV_USER_UUID,
     email: 'dev@athena.local',
     role: 'admin',
     full_name: 'Developer',
@@ -55,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // DEV BYPASS: Skip auth and use mock user
         if (DEV_BYPASS_AUTH && process.env.NODE_ENV === 'development') {
             setProfile(DEV_MOCK_PROFILE);
-            setUser({ id: 'dev-user-001', email: 'dev@athena.local' } as User);
+            setUser({ id: DEV_USER_UUID, email: 'dev@athena.local' } as User);
             setLoading(false);
             return;
         }
