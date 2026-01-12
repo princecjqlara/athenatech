@@ -15,6 +15,8 @@ export async function POST(request: NextRequest) {
                 return await generateRecommendations(data);
             case 'extract_features':
                 return await extractFeatures(data);
+            case 'analyze_lead_conversation':
+                return await analyzeLeadConversation(data);
             default:
                 return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
         }
@@ -109,6 +111,102 @@ Provide recommendations in JSON format:
         return NextResponse.json({
             success: false,
             error: 'Failed to generate recommendations',
+        }, { status: 500 });
+    }
+}
+
+async function analyzeLeadConversation(data: {
+    leadName: string;
+    conversationHistory: string[];
+    currentStage: string;
+    leadSource?: string;
+    adAccountName?: string;
+}) {
+    console.log('[AI API] Analyzing lead conversation:', data.leadName);
+
+    const conversationText = data.conversationHistory?.join('\n') || 'No conversation history available';
+
+    const prompt = `You are an expert sales analyst and CRM specialist. Analyze this lead conversation and classify the lead for pipeline management.
+
+Lead Information:
+- Name: ${data.leadName}
+- Current Stage: ${data.currentStage}
+- Source: ${data.leadSource || 'Unknown'}
+- Ad Account: ${data.adAccountName || 'Unknown'}
+
+Conversation History:
+${conversationText}
+
+Analyze this conversation and provide your assessment in the following JSON format:
+{
+    "summary": "Brief 1-2 sentence summary of the conversation and lead status",
+    "sentiment": "positive" | "neutral" | "negative" | "mixed",
+    "intent": "What the lead is trying to achieve",
+    "engagementScore": 0-100,
+    "suggestedStage": "new" | "contacted" | "qualified" | "converted" | "lost",
+    "stageConfidence": 0-100,
+    "stageReason": "Why this stage is recommended",
+    "topics": ["array", "of", "discussed", "topics"],
+    "painPoints": ["identified", "pain", "points"],
+    "objections": ["identified", "objections"],
+    "nextAction": "Specific recommended next step",
+    "priority": "high" | "medium" | "low",
+    "qualificationScore": {
+        "budget": "confirmed" | "likely" | "unknown" | "unlikely",
+        "authority": "confirmed" | "likely" | "unknown" | "unlikely",
+        "need": "confirmed" | "likely" | "unknown" | "unlikely",
+        "timeline": "confirmed" | "likely" | "unknown" | "unlikely"
+    }
+}
+
+Be specific and actionable in your analysis. Focus on sales-relevant insights.`;
+
+    try {
+        const response = await callNvidiaAI(prompt);
+
+        // Parse the response
+        let analysis;
+        try {
+            // Try to extract JSON from the response
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                analysis = JSON.parse(jsonMatch[0]);
+            } else {
+                analysis = JSON.parse(response);
+            }
+        } catch {
+            // If parsing fails, return a structured fallback
+            analysis = {
+                summary: response.slice(0, 200),
+                sentiment: 'neutral',
+                intent: 'Unknown',
+                engagementScore: 50,
+                suggestedStage: data.currentStage,
+                stageConfidence: 50,
+                stageReason: 'Unable to determine from conversation',
+                topics: [],
+                painPoints: [],
+                objections: [],
+                nextAction: 'Follow up with lead',
+                priority: 'medium',
+                qualificationScore: {
+                    budget: 'unknown',
+                    authority: 'unknown',
+                    need: 'unknown',
+                    timeline: 'unknown'
+                }
+            };
+        }
+
+        return NextResponse.json({
+            success: true,
+            analysis,
+        });
+    } catch (error) {
+        console.error('[AI API] Lead conversation analysis error:', error);
+        return NextResponse.json({
+            success: false,
+            error: 'Failed to analyze conversation',
         }, { status: 500 });
     }
 }

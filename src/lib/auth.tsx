@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from './supabase';
 import { User, Session } from '@supabase/supabase-js';
+import { saveAccount } from './savedAccounts';
 
 export type UserRole = 'admin' | 'user';
 
@@ -114,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
             if (error) throw error;
+
+            // Save account for quick sign-in again
+            saveAccount({ email });
+
             return { error: null };
         } catch (error) {
             return { error: error as Error };
@@ -150,7 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Mark invite code as used
             if (authData.user) {
-                await supabase
+                // Small delay to ensure the profile trigger has completed
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                const { error: updateError } = await supabase
                     .from('invite_codes')
                     .update({
                         is_used: true,
@@ -158,6 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         used_at: new Date().toISOString(),
                     })
                     .eq('code', inviteCode);
+
+                if (updateError) {
+                    console.error('Failed to mark invite code as used:', updateError);
+                }
             }
 
             return { error: null };

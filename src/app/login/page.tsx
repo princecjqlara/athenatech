@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff, Sparkles, User, X, Clock } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { getSavedAccounts, removeAccount, SavedAccount } from '@/lib/savedAccounts';
 
 // Animated floating orb component
 function FloatingOrb({ delay, size, color, position }: { delay: number; size: number; color: string; position: { x: string; y: string } }) {
@@ -37,12 +38,48 @@ function FloatingOrb({ delay, size, color, position }: { delay: number; size: nu
 
 export default function LoginPage() {
     const router = useRouter();
-    const { signIn } = useAuth();
+    const { signIn, user } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
+    const [showSavedAccounts, setShowSavedAccounts] = useState(true);
+
+    // Load saved accounts on mount
+    useEffect(() => {
+        const accounts = getSavedAccounts();
+        setSavedAccounts(accounts);
+    }, []);
+
+
+    function handleSelectAccount(account: SavedAccount) {
+        setEmail(account.email);
+        setShowSavedAccounts(false);
+        // Focus password input
+        setTimeout(() => {
+            document.getElementById('password-input')?.focus();
+        }, 100);
+    }
+
+    function handleRemoveAccount(e: React.MouseEvent, accountEmail: string) {
+        e.stopPropagation();
+        removeAccount(accountEmail);
+        setSavedAccounts(getSavedAccounts());
+    }
+
+    function formatLastSignedIn(dateStr: string) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        return date.toLocaleDateString();
+    }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -124,6 +161,67 @@ export default function LoginPage() {
                     <div className="absolute -inset-[1px] bg-gradient-to-r from-violet-500/50 via-fuchsia-500/50 to-violet-500/50 rounded-2xl blur-sm opacity-50" />
 
                     <div className="relative bg-[#12121a]/90 backdrop-blur-xl rounded-2xl p-8 border border-white/10 shadow-2xl">
+                        {/* Saved Accounts Section */}
+                        <AnimatePresence>
+                            {savedAccounts.length > 0 && showSavedAccounts && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="mb-6"
+                                >
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-sm font-medium text-gray-400 flex items-center gap-2">
+                                            <Clock size={14} className="text-violet-400" />
+                                            Sign in again
+                                        </h3>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowSavedAccounts(false)}
+                                            className="text-gray-500 hover:text-gray-300 text-xs transition-colors"
+                                        >
+                                            Use another account
+                                        </button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {savedAccounts.map((account, index) => (
+                                            <motion.button
+                                                key={account.email}
+                                                type="button"
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: index * 0.1 }}
+                                                onClick={() => handleSelectAccount(account)}
+                                                className="w-full p-3 rounded-xl bg-white/5 border border-white/10 hover:border-violet-500/50 hover:bg-violet-500/10 transition-all flex items-center gap-3 group"
+                                            >
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white font-semibold">
+                                                    {account.fullName?.[0]?.toUpperCase() || account.email[0].toUpperCase()}
+                                                </div>
+                                                <div className="flex-1 text-left">
+                                                    {account.fullName && (
+                                                        <p className="text-white text-sm font-medium">{account.fullName}</p>
+                                                    )}
+                                                    <p className="text-gray-400 text-xs">{account.email}</p>
+                                                    <p className="text-gray-600 text-xs">{formatLastSignedIn(account.lastSignedIn)}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => handleRemoveAccount(e, account.email)}
+                                                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all"
+                                                    title="Remove account"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </motion.button>
+                                        ))}
+                                    </div>
+                                    <div className="mt-4 border-t border-white/5 pt-4">
+                                        <p className="text-center text-gray-600 text-xs">Or enter credentials below</p>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
                         <form onSubmit={handleSubmit} className="space-y-5">
                             {error && (
                                 <motion.div
@@ -160,6 +258,7 @@ export default function LoginPage() {
                                 <div className="relative group">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-violet-400 transition-colors" size={18} />
                                     <input
+                                        id="password-input"
                                         type={showPassword ? 'text' : 'password'}
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}

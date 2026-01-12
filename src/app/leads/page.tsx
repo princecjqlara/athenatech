@@ -23,7 +23,8 @@ import {
     Settings,
     GripVertical,
     Sparkles,
-    Check
+    Check,
+    RefreshCw
 } from 'lucide-react';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -84,6 +85,13 @@ interface Lead {
     lastContactedAt?: string;
     conversationContext?: ConversationContext;
     extraDetails?: ExtraContactDetails;
+    // Ad Account Source
+    adAccountId?: string;
+    adAccountName?: string;
+    campaignId?: string;
+    campaignName?: string;
+    adId?: string;
+    adName?: string;
 }
 
 interface StageEvent {
@@ -169,6 +177,12 @@ const dummyLeads: Lead[] = [
         pageLink: 'https://facebook.com/business/123',
         facebookId: 'fb_123456',
         company: 'Smith Enterprises',
+        adAccountId: 'act_123456789',
+        adAccountName: 'Main Business Account',
+        campaignId: 'camp_001',
+        campaignName: 'Lead Gen - Premium',
+        adId: 'ad_001',
+        adName: 'Premium Package Video',
         conversationContext: {
             lastMessage: 'Hi, I\'m interested in your premium package',
             lastMessageAt: '2026-01-09 14:30',
@@ -410,7 +424,8 @@ function LeadDetailsModal({
     onDelete,
     onAddTag,
     onRemoveTag,
-    allTags
+    allTags,
+    onUpdateConversationContext
 }: {
     lead: Lead;
     onClose: () => void;
@@ -419,8 +434,63 @@ function LeadDetailsModal({
     onAddTag: (tagId: string) => void;
     onRemoveTag: (tagId: string) => void;
     allTags: Tag[];
+    onUpdateConversationContext?: (context: ConversationContext) => void;
 }) {
     const [showTagPicker, setShowTagPicker] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+
+    const handleAnalyzeConversation = async () => {
+        setIsAnalyzing(true);
+        setAiError(null);
+
+        try {
+            const response = await fetch('/api/ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'analyze_lead_conversation',
+                    data: {
+                        leadName: lead.name,
+                        conversationHistory: lead.conversationContext?.lastMessage
+                            ? [lead.conversationContext.lastMessage]
+                            : ['Initial contact - no conversation history yet'],
+                        currentStage: lead.status,
+                        leadSource: lead.source,
+                        adAccountName: lead.adAccountName,
+                    }
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success && result.analysis && onUpdateConversationContext) {
+                // Update the lead's conversation context with AI analysis
+                const updatedContext: ConversationContext = {
+                    ...lead.conversationContext,
+                    lastMessage: lead.conversationContext?.lastMessage || '',
+                    lastMessageAt: lead.conversationContext?.lastMessageAt || new Date().toISOString(),
+                    messageCount: lead.conversationContext?.messageCount || 1,
+                    aiSummary: result.analysis.summary,
+                    sentiment: result.analysis.sentiment,
+                    intent: result.analysis.intent,
+                    topics: result.analysis.topics,
+                    nextAction: result.analysis.nextAction,
+                    engagementScore: result.analysis.engagementScore,
+                    painPoints: result.analysis.painPoints,
+                    objections: result.analysis.objections,
+                };
+                onUpdateConversationContext(updatedContext);
+            } else {
+                setAiError(result.error || 'Analysis failed');
+            }
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            setAiError('Failed to connect to AI service');
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
 
     return (
         <motion.div
@@ -441,6 +511,23 @@ function LeadDetailsModal({
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold">Lead Details</h2>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleAnalyzeConversation}
+                            disabled={isAnalyzing}
+                            className="btn-secondary py-2 px-3 flex items-center gap-1 bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20"
+                        >
+                            {isAnalyzing ? (
+                                <>
+                                    <RefreshCw size={14} className="animate-spin" />
+                                    Analyzing...
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles size={14} />
+                                    AI Analyze
+                                </>
+                            )}
+                        </button>
                         <button onClick={onEdit} className="btn-secondary py-2 px-3 flex items-center gap-1">
                             <Edit size={14} />
                             Edit
@@ -453,6 +540,16 @@ function LeadDetailsModal({
                         </button>
                     </div>
                 </div>
+
+                {/* AI Error Alert */}
+                {aiError && (
+                    <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center justify-between">
+                        <span>{aiError}</span>
+                        <button onClick={() => setAiError(null)} className="hover:text-white">
+                            <X size={14} />
+                        </button>
+                    </div>
+                )}
 
                 {/* Lead Name & Status */}
                 <div className="flex items-center gap-4 mb-6">
@@ -557,7 +654,39 @@ function LeadDetailsModal({
                     )}
                 </div>
 
-                {/* AI Conversation Analysis */}
+                {/* Ad Account Source */}
+                {(lead.adAccountName || lead.campaignName || lead.adName) && (
+                    <div className="mb-6">
+                        <div className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2">
+                            <Activity size={12} className="text-blue-400" /> AD SOURCE
+                        </div>
+                        <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 space-y-3">
+                            {lead.adAccountName && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--text-muted)]">Ad Account</span>
+                                    <span className="text-sm font-medium text-blue-300">{lead.adAccountName}</span>
+                                </div>
+                            )}
+                            {lead.campaignName && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--text-muted)]">Campaign</span>
+                                    <span className="text-sm text-blue-200">{lead.campaignName}</span>
+                                </div>
+                            )}
+                            {lead.adName && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--text-muted)]">Ad</span>
+                                    <span className="text-sm text-blue-200">{lead.adName}</span>
+                                </div>
+                            )}
+                            {lead.adAccountId && (
+                                <div className="text-xs text-[var(--text-muted)] pt-2 border-t border-blue-500/20">
+                                    Account ID: {lead.adAccountId}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
                 {lead.conversationContext && (
                     <div className="mb-6">
                         <div className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2">

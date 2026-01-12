@@ -54,7 +54,7 @@ alter table public.recommendations enable row level security;
 
 create policy "Users can manage own recommendations"
     on public.recommendations for all
-    using (auth.uid() = user_id);
+    using ((select auth.uid()) = user_id);
 
 
 -- =====================================================
@@ -113,7 +113,7 @@ alter table public.scoring_gates enable row level security;
 
 create policy "Users can manage own scoring gates"
     on public.scoring_gates for all
-    using (auth.uid() = user_id);
+    using ((select auth.uid()) = user_id);
 
 
 -- =====================================================
@@ -153,7 +153,7 @@ alter table public.ad_context_history enable row level security;
 
 create policy "Users can manage own ad context history"
     on public.ad_context_history for all
-    using (auth.uid() = user_id);
+    using ((select auth.uid()) = user_id);
 
 
 -- =====================================================

@@ -49,7 +49,7 @@ ALTER TABLE gate_audit_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can view own audit logs" ON gate_audit_log;
 CREATE POLICY "Users can view own audit logs"
     ON gate_audit_log FOR SELECT
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 -- Admin policy for debugging (optional)
 -- CREATE POLICY "Admins can view all audit logs"
@@ -148,7 +148,7 @@ ALTER TABLE account_baselines ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can manage own baselines" ON account_baselines;
 CREATE POLICY "Users can manage own baselines"
     ON account_baselines FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 
 -- =====================================================

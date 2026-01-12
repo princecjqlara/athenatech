@@ -41,7 +41,7 @@ ALTER TABLE monthly_learnings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own monthly learnings"
     ON monthly_learnings FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 
 -- =====================================================

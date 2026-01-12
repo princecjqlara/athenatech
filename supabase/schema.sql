@@ -46,19 +46,35 @@ create table if not exists public.invite_codes (
 alter table public.invite_codes enable row level security;
 
 -- Invite codes policies
--- For development: Allow public access to invite_codes
--- In production, replace with proper auth.uid() based policies
-create policy "Public can insert invite codes"
+-- Only admins can create and delete invite codes
+-- Anyone can read invite codes (for verification during signup)
+create policy "Admins can insert invite codes"
   on public.invite_codes for insert
-  with check (true);
+  with check (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and role = 'admin'
+    )
+  );
 
-create policy "Public can select invite codes"
+create policy "Anyone can select invite codes"
   on public.invite_codes for select
   using (true);
 
-create policy "Public can delete invite codes"
+create policy "Admins can delete invite codes"
   on public.invite_codes for delete
-  using (true);
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and role = 'admin'
+    )
+  );
+
+-- Anyone can update invite codes (needed for marking as used during signup)
+create policy "Anyone can update invite codes"
+  on public.invite_codes for update
+  using (true)
+  with check (true);
 
 -- Function to create profile on user signup
 create or replace function public.handle_new_user()
@@ -99,7 +115,7 @@ alter table public.meta_integrations enable row level security;
 
 create policy "Users can manage own integrations"
   on public.meta_integrations for all
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 -- Insert first admin (run this after creating your first user)
 -- update public.profiles set role = 'admin' where email = 'your-email@example.com';

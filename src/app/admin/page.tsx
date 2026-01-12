@@ -12,6 +12,7 @@ import {
     Trash2,
     RefreshCw,
     Shield,
+    Crown,
 } from 'lucide-react';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -26,6 +27,10 @@ interface InviteCode {
     is_used: boolean;
     used_by?: string;
     used_at?: string;
+    used_by_user?: {
+        email: string;
+        full_name?: string;
+    };
 }
 
 export default function AdminPage() {
@@ -59,7 +64,10 @@ export default function AdminPage() {
     async function fetchInviteCodes() {
         const { data, error } = await supabase
             .from('invite_codes')
-            .select('*')
+            .select(`
+                *,
+                used_by_user:profiles!invite_codes_used_by_fkey(email, full_name)
+            `)
             .order('created_at', { ascending: false });
 
         if (!error && data) {
@@ -102,6 +110,15 @@ export default function AdminPage() {
         await supabase
             .from('profiles')
             .update({ is_suspended: !currentStatus })
+            .eq('id', userId);
+        fetchUsers();
+    }
+
+    async function toggleAdminRole(userId: string, currentRole: string) {
+        const newRole = currentRole === 'admin' ? 'user' : 'admin';
+        await supabase
+            .from('profiles')
+            .update({ role: newRole })
             .eq('id', userId);
         fetchUsers();
     }
@@ -210,15 +227,24 @@ export default function AdminPage() {
                                                     </span>
                                                 </td>
                                                 <td>{new Date(user.created_at).toLocaleDateString()}</td>
-                                                <td>
+                                                <td className="flex gap-1">
                                                     {user.id !== profile?.id && (
-                                                        <button
-                                                            onClick={() => toggleUserSuspension(user.id, user.is_suspended)}
-                                                            className={`btn-icon w-8 h-8 ${user.is_suspended ? 'text-[var(--success)]' : 'text-[var(--error)]'}`}
-                                                            title={user.is_suspended ? 'Activate User' : 'Suspend User'}
-                                                        >
-                                                            {user.is_suspended ? <PlayCircle size={16} /> : <Ban size={16} />}
-                                                        </button>
+                                                        <>
+                                                            <button
+                                                                onClick={() => toggleAdminRole(user.id, user.role)}
+                                                                className={`btn-icon w-8 h-8 ${user.role === 'admin' ? 'text-[var(--warning)]' : 'text-[var(--info)]'}`}
+                                                                title={user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                                                            >
+                                                                <Crown size={16} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => toggleUserSuspension(user.id, user.is_suspended)}
+                                                                className={`btn-icon w-8 h-8 ${user.is_suspended ? 'text-[var(--success)]' : 'text-[var(--error)]'}`}
+                                                                title={user.is_suspended ? 'Activate User' : 'Suspend User'}
+                                                            >
+                                                                {user.is_suspended ? <PlayCircle size={16} /> : <Ban size={16} />}
+                                                            </button>
+                                                        </>
                                                     )}
                                                 </td>
                                             </tr>
@@ -278,7 +304,13 @@ export default function AdminPage() {
                                                         </span>
                                                     </td>
                                                     <td>{new Date(invite.created_at).toLocaleDateString()}</td>
-                                                    <td>{invite.used_by || '-'}</td>
+                                                    <td>
+                                                        {invite.used_by_user ? (
+                                                            <span className="text-sm">
+                                                                {invite.used_by_user.full_name || invite.used_by_user.email}
+                                                            </span>
+                                                        ) : '-'}
+                                                    </td>
                                                     <td className="flex gap-2">
                                                         {!invite.is_used && (
                                                             <>

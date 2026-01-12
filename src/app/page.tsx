@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -12,6 +14,13 @@ import {
 } from 'lucide-react';
 
 export default function HomePage() {
+  const router = useRouter();
+
+  // Redirect to login page on mount
+  useEffect(() => {
+    router.push('/login');
+  }, [router]);
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
       {/* Hero Section */}
