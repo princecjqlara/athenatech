@@ -53,6 +53,13 @@ export function MetaConnectModal({
         }
     }, [adAccounts, selectedAdAccount]);
 
+    // Auto-select first page if available (required for Lead Ads)
+    useEffect(() => {
+        if (pages.length > 0 && !selectedPage) {
+            setSelectedPage(pages[0]);
+        }
+    }, [pages, selectedPage]);
+
     const handleSave = async () => {
         if (!selectedAdAccount) {
             setError('Please select an ad account');
@@ -157,8 +164,8 @@ export function MetaConnectModal({
                                         key={account.id}
                                         onClick={() => setSelectedAdAccount(account)}
                                         className={`w-full p-4 rounded-xl border text-left transition-all ${selectedAdAccount?.id === account.id
-                                                ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10'
-                                                : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:border-[var(--accent-primary)]/50'
+                                            ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10'
+                                            : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:border-[var(--accent-primary)]/50'
                                             }`}
                                     >
                                         <div className="flex items-center justify-between">
@@ -185,7 +192,7 @@ export function MetaConnectModal({
                     <div className="mb-6">
                         <label className="flex items-center gap-2 text-sm font-medium mb-3">
                             <FileText size={16} className="text-[var(--accent-primary)]" />
-                            Facebook Page <span className="text-[var(--text-muted)]">(for Lead Ads)</span>
+                            Facebook Page <span className="text-[var(--text-muted)]">(Recommended - required for Lead Sync)</span>
                         </label>
                         <div className="space-y-2">
                             {pages.length === 0 ? (
@@ -197,8 +204,8 @@ export function MetaConnectModal({
                                     <button
                                         onClick={() => setSelectedPage(null)}
                                         className={`w-full p-3 rounded-xl border text-left transition-all ${!selectedPage
-                                                ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]'
-                                                : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:border-[var(--accent-primary)]/50'
+                                            ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]'
+                                            : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:border-[var(--accent-primary)]/50'
                                             }`}
                                     >
                                         <span className="text-[var(--text-muted)]">Skip page connection</span>
@@ -208,8 +215,8 @@ export function MetaConnectModal({
                                             key={page.id}
                                             onClick={() => setSelectedPage(page)}
                                             className={`w-full p-4 rounded-xl border text-left transition-all ${selectedPage?.id === page.id
-                                                    ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10'
-                                                    : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:border-[var(--accent-primary)]/50'
+                                                ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10'
+                                                : 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:border-[var(--accent-primary)]/50'
                                                 }`}
                                         >
                                             <div className="flex items-center justify-between">

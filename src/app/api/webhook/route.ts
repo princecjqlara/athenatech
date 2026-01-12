@@ -83,13 +83,15 @@ export async function POST(request: NextRequest) {
 
 async function handleMessagingEvent(event: any, supabase: any) {
     const senderId = event.sender?.id;
-    const recipientId = event.recipient?.id;
+    const recipientId = event.recipient?.id; // This is the page ID
     const message = event.message;
+    const referral = event.referral;
 
     console.log('[Facebook Webhook] Messaging event:', {
         senderId,
         recipientId,
         message: message?.text,
+        referral: referral,
     });
 
     // Skip echo messages (messages sent by page)
@@ -98,9 +100,157 @@ async function handleMessagingEvent(event: any, supabase: any) {
         return;
     }
 
-    // TODO: Store message in database for messenger integration
-    // TODO: Process with AI if needed
-    // TODO: Send auto-reply if configured
+    // Check if this is a referral from an ad
+    let adId = null;
+    let adSource = null;
+    if (referral && referral.source === 'ADS') {
+        adId = referral.ad_id;
+        adSource = referral.ads_context_data?.ad_title || `Ad ${referral.ad_id}`;
+        console.log('[Facebook Webhook] Conversation from ad:', adId, adSource);
+    }
+
+    // Find the integration for this page
+    const { data: integration } = await supabase
+        .from('meta_integrations')
+        .select('user_id, access_token, page_access_token, page_id')
+        .eq('page_id', recipientId)
+        .eq('is_active', true)
+        .single();
+
+    if (!integration) {
+        console.log('[Facebook Webhook] No integration found for page:', recipientId);
+        return;
+    }
+
+    // Create or update lead from this messenger contact
+    const leadId = `conv-${senderId}-${recipientId}`;
+
+    // Get existing lead to check message count
+    const { data: existingLead } = await supabase
+        .from('meta_leads')
+        .select('id, message_count, field_data, status')
+        .eq('id', leadId)
+        .single();
+
+    const currentMessageCount = (existingLead?.message_count || 0) + 1;
+    const existingMessages = existingLead?.field_data?.find((f: any) => f.name === 'conversation_messages')?.values?.[0] || '';
+    const senderType = senderId === recipientId ? 'PAGE' : 'CONTACT';
+    const newConversation = existingMessages
+        ? `${existingMessages}\n${senderType}: ${message?.text || '[attachment]'}`
+        : `${senderType}: ${message?.text || '[attachment]'}`;
+
+    // Upsert lead with incremented message count
+    const { error: upsertError } = await supabase
+        .from('meta_leads')
+        .upsert({
+            id: leadId,
+            user_id: integration.user_id,
+            page_id: recipientId,
+            source: 'messenger',
+            ad_id: adId || existingLead?.ad_id,
+            ad_source: adSource || existingLead?.ad_source,
+            status: existingLead?.status || 'new',
+            message_count: currentMessageCount,
+            field_data: [{ name: 'conversation_messages', values: [newConversation.substring(0, 4000)] }],
+            synced_at: new Date().toISOString(),
+        }, {
+            onConflict: 'id',
+            ignoreDuplicates: false
+        });
+
+    if (upsertError) {
+        console.error('[Facebook Webhook] Error storing messenger lead:', upsertError);
+        return;
+    }
+
+    console.log('[Facebook Webhook] Lead updated, message count:', currentMessageCount, leadId);
+
+    // Re-analyze every 3 messages
+    if (currentMessageCount % 3 === 0 && newConversation.length > 20) {
+        console.log('[Facebook Webhook] Triggering re-analysis for:', leadId, 'after', currentMessageCount, 'messages');
+
+        try {
+            const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
+            const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+
+            if (!NVIDIA_API_KEY) {
+                console.warn('[Facebook Webhook] NVIDIA API key not configured');
+                return;
+            }
+
+            const aiPrompt = `Analyze this Messenger conversation between a business PAGE and a CONTACT. Determine the current stage in the sales pipeline.
+
+Conversation:
+${newConversation.substring(0, 2000)}
+
+Pipeline stages:
+- "new": First contact, no meaningful conversation yet
+- "contacted": Page has responded, conversation started
+- "qualified": Contact shows genuine interest, asked specific questions, or discussed pricing/details
+- "converted": Contact made a purchase, signed up, or completed the desired action
+
+Respond with JSON only:
+{
+  "summary": "Brief 1-2 sentence summary of current conversation state",
+  "sentiment": "positive/neutral/negative",
+  "intent": "inquiry/purchase/support/complaint/other",
+  "suggested_stage": "new/contacted/qualified/converted",
+  "stage_reason": "Brief reason for stage"
+}`;
+
+            const nvidiaResponse = await fetch(NVIDIA_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'meta/llama-3.1-70b-instruct',
+                    messages: [
+                        { role: 'system', content: 'You are a sales lead analyst. Always respond with valid JSON only.' },
+                        { role: 'user', content: aiPrompt },
+                    ],
+                    max_tokens: 500,
+                    temperature: 0.3,
+                }),
+            });
+
+            if (nvidiaResponse.ok) {
+                const nvidiaData = await nvidiaResponse.json();
+                const aiContent = nvidiaData.choices?.[0]?.message?.content || '';
+                console.log('[Facebook Webhook] AI response:', aiContent.substring(0, 100));
+
+                try {
+                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const analysis = JSON.parse(jsonMatch[0]);
+                        const validStages = ['new', 'contacted', 'qualified', 'converted'];
+                        const suggestedStage = validStages.includes(analysis.suggested_stage)
+                            ? analysis.suggested_stage
+                            : existingLead?.status || 'new';
+
+                        await supabase
+                            .from('meta_leads')
+                            .update({
+                                ai_summary: analysis.summary,
+                                ai_sentiment: analysis.sentiment,
+                                ai_intent: analysis.intent,
+                                status: suggestedStage,
+                                last_analyzed_at: new Date().toISOString(),
+                            })
+                            .eq('id', leadId);
+                        console.log('[Facebook Webhook] Re-analysis complete, stage:', suggestedStage);
+                    }
+                } catch (parseError) {
+                    console.warn('[Facebook Webhook] Could not parse AI response:', parseError);
+                }
+            } else {
+                console.warn('[Facebook Webhook] NVIDIA API error:', nvidiaResponse.status);
+            }
+        } catch (aiError) {
+            console.warn('[Facebook Webhook] AI analysis failed:', aiError);
+        }
+    }
 }
 
 async function handleLeadEvent(leadData: any, pageId: string, supabase: any) {

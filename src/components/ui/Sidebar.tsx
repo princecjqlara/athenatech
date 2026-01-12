@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/lib/auth';
 import {
     LayoutDashboard,
     Megaphone,
@@ -26,7 +27,14 @@ const navItems = [
 
 export function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter();
+    const { signOut } = useAuth();
     const [expanded, setExpanded] = useState(false);
+
+    const handleLogout = async () => {
+        await signOut();
+        router.push('/login');
+    };
 
     return (
         <motion.aside
@@ -98,6 +106,7 @@ export function Sidebar() {
             {/* Bottom section */}
             <div className="mt-auto px-3 w-full">
                 <button
+                    onClick={handleLogout}
                     className={`flex items-center gap-3 h-11 rounded-xl transition-all duration-200 w-full overflow-hidden
             ${expanded ? 'px-3' : 'px-0 justify-center'}
             text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg)]`}
