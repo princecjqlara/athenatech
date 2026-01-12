@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from './supabase';
 import { User, Session } from '@supabase/supabase-js';
+import { saveAccount } from './savedAccounts';
 
 export type UserRole = 'admin' | 'user';
 
@@ -24,11 +25,25 @@ interface AuthContextType {
     loading: boolean;
     signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
     signUp: (email: string, password: string, inviteCode: string, fullName?: string) => Promise<{ error: Error | null }>;
+    signInWithGoogle: () => Promise<{ error: Error | null }>;
+    signInWithFacebook: () => Promise<{ error: Error | null }>;
     signOut: () => Promise<void>;
     isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// ⚠️ DEV ONLY: Set to true to bypass authentication
+const DEV_BYPASS_AUTH = true;
+
+const DEV_MOCK_PROFILE: UserProfile = {
+    id: 'dev-user-001',
+    email: 'dev@athena.local',
+    role: 'admin',
+    full_name: 'Developer',
+    is_suspended: false,
+    created_at: new Date().toISOString(),
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -37,6 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // DEV BYPASS: Skip auth and use mock user
+        if (DEV_BYPASS_AUTH && process.env.NODE_ENV === 'development') {
+            setProfile(DEV_MOCK_PROFILE);
+            setUser({ id: 'dev-user-001', email: 'dev@athena.local' } as User);
+            setLoading(false);
+            return;
+        }
+
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
@@ -92,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
             if (error) throw error;
+
+            // Save account for quick sign-in again
+            saveAccount({ email });
+
             return { error: null };
         } catch (error) {
             return { error: error as Error };
@@ -128,7 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Mark invite code as used
             if (authData.user) {
-                await supabase
+                // Small delay to ensure the profile trigger has completed
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                const { error: updateError } = await supabase
                     .from('invite_codes')
                     .update({
                         is_used: true,
@@ -136,6 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         used_at: new Date().toISOString(),
                     })
                     .eq('code', inviteCode);
+
+                if (updateError) {
+                    console.error('Failed to mark invite code as used:', updateError);
+                }
             }
 
             return { error: null };
@@ -145,10 +179,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     async function signOut() {
-        await supabase.auth.signOut();
+        // Clear all auth state
         setUser(null);
         setProfile(null);
         setSession(null);
+
+        // Only call Supabase signOut if not in dev bypass mode
+        if (!DEV_BYPASS_AUTH) {
+            await supabase.auth.signOut();
+        }
+
+        // Redirect to login page
+        window.location.href = '/login';
+    }
+
+    async function signInWithGoogle() {
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: `${window.location.origin}/dashboard`,
+                },
+            });
+
+            if (error) throw error;
+            return { error: null };
+        } catch (error) {
+            return { error: error as Error };
+        }
+    }
+
+    async function signInWithFacebook() {
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'facebook',
+                options: {
+                    redirectTo: `${window.location.origin}/dashboard`,
+                },
+            });
+
+            if (error) throw error;
+            return { error: null };
+        } catch (error) {
+            return { error: error as Error };
+        }
     }
 
     const value = {
@@ -158,6 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signIn,
         signUp,
+        signInWithGoogle,
+        signInWithFacebook,
         signOut,
         isAdmin: profile?.role === 'admin',
     };

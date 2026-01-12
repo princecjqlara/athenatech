@@ -1371,9 +1371,157 @@ export default function AdsPage() {
         },
     ];
 
+    // Dummy campaigns for development/demo
+    const dummyCampaigns: Campaign[] = [
+        {
+            id: 'camp-001',
+            name: 'Summer Sale 2026',
+            objective: 'CONVERSIONS',
+            status: 'active',
+            budgetType: 'daily',
+            budget: 5000,
+            adSets: [
+                {
+                    id: 'adset-001',
+                    campaignId: 'camp-001',
+                    name: 'Women 25-44 - Metro Manila',
+                    status: 'active',
+                    budget: 2500,
+                    budgetType: 'daily',
+                    targeting: {
+                        ageMin: 25,
+                        ageMax: 44,
+                        genders: ['female'],
+                        locations: [{ country: 'Philippines', region: 'Metro Manila' }],
+                        interests: ['Fashion', 'Shopping', 'Beauty'],
+                        audienceSize: 2500000,
+                    },
+                    placements: ['Feed', 'Stories', 'Reels'],
+                    schedule: { start: new Date('2026-01-01') },
+                    ads: [
+                        {
+                            id: 'ad-001',
+                            adSetId: 'adset-001',
+                            name: 'UGC Testimonial - Sarah',
+                            status: 'active',
+                            phase: 'scaling',
+                            creativeType: 'UGC_Testimonial',
+                            mediaType: 'video',
+                            thumbnailUrl: '/creative-thumb-1.jpg',
+                            spend: 2500,
+                            revenue: 9500,
+                            impressions: 125000,
+                            reach: 95000,
+                            frequency: 1.32,
+                            clicks: 4500,
+                            ctr: 3.6,
+                            cpc: 0.56,
+                            cpm: 20,
+                            conversions: 95,
+                            cpa: 26.32,
+                            leads: 180,
+                            qualifiedLeads: 95,
+                            videoMetrics: generateVideoMetrics(),
+                            dailyData: generateDailyData(2500, 9500, 14),
+                            tags: [],
+                            demographics: generateDemographics(2500, 95),
+                            performance: 'winner',
+                            createdAt: new Date('2026-01-01'),
+                        },
+                        {
+                            id: 'ad-002',
+                            adSetId: 'adset-001',
+                            name: 'Problem Solution - Before/After',
+                            status: 'active',
+                            phase: 'stable',
+                            creativeType: 'Problem_Solution',
+                            mediaType: 'video',
+                            thumbnailUrl: '/creative-thumb-2.jpg',
+                            spend: 1800,
+                            revenue: 5400,
+                            impressions: 92000,
+                            reach: 75000,
+                            frequency: 1.23,
+                            clicks: 2800,
+                            ctr: 3.04,
+                            cpc: 0.64,
+                            cpm: 19.57,
+                            conversions: 54,
+                            cpa: 33.33,
+                            leads: 120,
+                            qualifiedLeads: 54,
+                            videoMetrics: generateVideoMetrics(),
+                            dailyData: generateDailyData(1800, 5400, 14),
+                            tags: [],
+                            demographics: generateDemographics(1800, 54),
+                            performance: 'neutral',
+                            createdAt: new Date('2026-01-03'),
+                        },
+                    ],
+                    spend: 4300,
+                    revenue: 14900,
+                    impressions: 217000,
+                    clicks: 7300,
+                    conversions: 149,
+                    leads: 300,
+                    qualifiedLeads: 149,
+                    createdAt: new Date('2026-01-01'),
+                },
+            ],
+            spend: 4300,
+            revenue: 14900,
+            impressions: 217000,
+            clicks: 7300,
+            conversions: 149,
+            leads: 300,
+            qualifiedLeads: 149,
+            createdAt: new Date('2026-01-01'),
+        },
+    ];
+
+    // Load dummy data for development/demo when no API data
+    useEffect(() => {
+        setLoading(false);
+        setConnected(true);
+        setCampaigns(dummyCampaigns);
+        setCreatives(dummyCreatives);
+        setLastUpdated(new Date());
+
+        // Expand first campaign by default
+        setExpandedCampaigns(new Set(['camp-001']));
+
+        // Live update interval - simulates real-time data refresh
+        const liveUpdateInterval = setInterval(() => {
+            setCampaigns(prevCampaigns => prevCampaigns.map(campaign => ({
+                ...campaign,
+                adSets: campaign.adSets.map(adSet => ({
+                    ...adSet,
+                    ads: adSet.ads.map(ad => {
+                        const newConversions = ad.conversions + (Math.random() > 0.8 ? 1 : 0);
+                        const conversionIncrease = newConversions - ad.conversions;
+                        const newLeads = ad.leads + (Math.random() > 0.7 ? 1 : 0);
+                        return {
+                            ...ad,
+                            impressions: ad.impressions + Math.floor(Math.random() * 50),
+                            clicks: ad.clicks + Math.floor(Math.random() * 5),
+                            conversions: newConversions,
+                            spend: ad.spend + Math.floor(Math.random() * 10),
+                            revenue: ad.revenue + (conversionIncrease * Math.floor(50 + Math.random() * 100)),
+                            leads: newLeads,
+                            qualifiedLeads: ad.qualifiedLeads + conversionIncrease,
+                        };
+                    }),
+                })),
+            })));
+            setLastUpdated(new Date());
+        }, 5000);
+
+        return () => clearInterval(liveUpdateInterval);
+    }, []);
+
     // Flatten all ads from campaigns for calculations
     const allAds = useMemo(() => {
-        return campaigns.flatMap((c: Campaign) => c.adSets.flatMap((as: AdSet) => as.ads));
+        return campaigns.flatMap(c => c.adSets.flatMap(as => as.ads));
     }, [campaigns]);
 
     // Tag management functions

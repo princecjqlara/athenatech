@@ -17,34 +17,28 @@ export async function GET(request: NextRequest) {
     const errorDescription = searchParams.get('error_description');
 
     // Handle OAuth errors
-    // Get the base URL for redirects (prefer ngrok for external access)
-    const getRedirectUrl = (path: string) => {
-        const base = process.env.NEXT_PUBLIC_NGROK_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-        return new URL(path, base);
-    };
-
     if (error) {
         console.error('[Facebook OAuth] Error:', error, errorDescription);
         return NextResponse.redirect(
-            getRedirectUrl(`/settings?error=${encodeURIComponent(errorDescription || error)}`)
+            new URL(`/settings?error=${encodeURIComponent(errorDescription || error)}`, request.url)
         );
     }
 
     // Validate required parameters
     if (!code) {
         return NextResponse.redirect(
-            getRedirectUrl('/settings?error=Missing%20authorization%20code')
+            new URL('/settings?error=Missing%20authorization%20code', request.url)
         );
     }
 
     if (!state) {
         return NextResponse.redirect(
-            getRedirectUrl('/settings?error=Missing%20state%20parameter')
+            new URL('/settings?error=Missing%20state%20parameter', request.url)
         );
     }
 
     try {
-        const baseUrl = process.env.NEXT_PUBLIC_NGROK_URL || process.env.NEXT_PUBLIC_APP_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
         const redirectUri = `${baseUrl}/api/auth/facebook/callback`;
 
         // Exchange code for access token
@@ -87,15 +81,14 @@ export async function GET(request: NextRequest) {
 
         // Redirect to settings page with selection modal open
         return NextResponse.redirect(
-            getRedirectUrl(`/settings?meta_connect=true&${selectionParams.toString()}`)
+            new URL(`/settings?meta_connect=true&${selectionParams.toString()}`, request.url)
         );
 
     } catch (error) {
         console.error('[Facebook OAuth] Error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to connect';
-        const base = process.env.NEXT_PUBLIC_NGROK_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
         return NextResponse.redirect(
-            new URL(`/settings?error=${encodeURIComponent(errorMessage)}`, base)
+            new URL(`/settings?error=${encodeURIComponent(errorMessage)}`, request.url)
         );
     }
 }
@@ -141,7 +134,6 @@ export async function POST(request: NextRequest) {
                 token_expires_at: expiresAt.toISOString(),
                 ad_account_id,
                 page_id: page_id || null,
-                page_access_token: page_access_token || null,
                 is_active: true,
                 updated_at: new Date().toISOString(),
             }, {

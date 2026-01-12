@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useMemo, Suspense, useState, useEffect, useCallback } from 'react';
+import { useRef, useMemo, Suspense, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html, Line, Points } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
@@ -56,14 +56,85 @@ interface SearchResult {
     full_name: string;
 }
 
-// ============ EMPTY HIERARCHY (No Data) ============
-const emptyHierarchy: HierarchyNode = {
-    id: 'account',
-    name: 'Ad Account',
+// ============ GENERATE 50 DUMMY CAMPAIGNS ============
+function generateDemoHierarchy(): HierarchyNode {
+    const campaignNames = [
+        'Summer Sale', 'Winter Promo', 'Spring Launch', 'Fall Collection', 'Holiday Special',
+        'Flash Sale', 'Clearance', 'New Arrivals', 'Best Sellers', 'Limited Edition',
+        'Brand Awareness', 'Retargeting', 'Lookalike', 'Interest Based', 'Broad Reach',
+        'Video Views', 'Engagement', 'Conversions', 'Lead Gen', 'App Install',
+        'Product Launch', 'Seasonal', 'Weekend Deal', 'Members Only', 'VIP Access',
+        'Early Bird', 'Last Chance', 'Bundle Deal', 'Buy One Get One', 'Free Shipping',
+        'First Time Buyer', 'Win Back', 'Cross Sell', 'Upsell', 'Loyalty',
+        'Influencer', 'UGC Campaign', 'Testimonial', 'Demo Video', 'Tutorial',
+        'FAQ Awareness', 'Problem Solution', 'Lifestyle', 'Premium', 'Budget',
+        'Mobile Only', 'Desktop Only', 'All Platforms', 'Social Only', 'Search Only'
+    ];
+
+    const adsetNames = ['Interest', 'Lookalike', 'Broad', 'Retarget', 'Custom', 'Engaged', 'Buyers', 'Viewers'];
+    const creativeNames = ['Video', 'Image', 'Carousel', 'Story', 'Reel', 'Collection', 'Instant'];
+
+    const campaigns: HierarchyNode[] = [];
+
+    for (let i = 0; i < 5; i++) {
+        const campaignRoas = 0.5 + Math.random() * 7;
+        const numAdSets = 1 + Math.floor(Math.random() * 3); // 1-3 ad sets
+
+        const adsets: HierarchyNode[] = [];
+        for (let j = 0; j < numAdSets; j++) {
+            const adsetRoas = campaignRoas * (0.7 + Math.random() * 0.6);
+            const numCreatives = 1 + Math.floor(Math.random() * 3); // 1-3 creatives
+
+            const creatives: HierarchyNode[] = [];
+            for (let k = 0; k < numCreatives; k++) {
+                creatives.push({
+                    id: `cr-${i}-${j}-${k}`,
+                    name: creativeNames[k % creativeNames.length],
+                    type: 'creative',
+                    metrics: { ctr: parseFloat((0.5 + Math.random() * 5).toFixed(1)), roas: parseFloat((adsetRoas * (0.8 + Math.random() * 0.4)).toFixed(1)) },
+                    children: [],
+                });
+            }
+
+            adsets.push({
+                id: `adset-${i}-${j}`,
+                name: adsetNames[j % adsetNames.length],
+                type: 'adset',
+                metrics: { spend: Math.floor(1000 + Math.random() * 9000), roas: parseFloat(adsetRoas.toFixed(1)) },
+                children: creatives,
+            });
+        }
+
+        campaigns.push({
+            id: `camp-${i}`,
+            name: campaignNames[i % campaignNames.length],
+            type: 'campaign',
+            metrics: { spend: Math.floor(5000 + Math.random() * 20000), roas: parseFloat(campaignRoas.toFixed(1)) },
+            children: adsets,
+        });
+    }
+
+    return {
+        id: 'account',
+        name: 'Ad Account',
+        type: 'account',
+        metrics: { spend: campaigns.reduce((s, c) => s + (c.metrics.spend || 0), 0) },
+        children: campaigns,
+    };
+}
+
+const demoHierarchy = generateDemoHierarchy();
+
+const getOtherUserHierarchy = (name: string): HierarchyNode => ({
+    id: 'other-account',
+    name: `${name}'s Account`,
     type: 'account',
-    metrics: { spend: 0 },
-    children: [],
-};
+    metrics: {},
+    children: [
+        { id: 'oc1', name: 'Campaign 1', type: 'campaign', metrics: {}, children: [] },
+        { id: 'oc2', name: 'Campaign 2', type: 'campaign', metrics: {}, children: [] },
+    ]
+});
 
 // ============ COLORS ============
 const typeColors: Record<string, string> = {
@@ -877,7 +948,18 @@ function Scene({ hierarchy, transitioning, showSuggestions, performanceFilter, o
 
             {allOrbs.map(o => <Orb key={o.id} orb={o} orbs={allOrbs} time={time} onClick={onOrbClick} />)}
 
-            <OrbitControls target={[0, 0, 0]} enablePan={false} enableZoom minDistance={15} maxDistance={80} autoRotate autoRotateSpeed={0.08} />
+            <OrbitControls
+                target={[0, 0, 0]}
+                enablePan={true}
+                enableZoom={true}
+                zoomSpeed={1.2}
+                minDistance={8}
+                maxDistance={120}
+                autoRotate
+                autoRotateSpeed={0.08}
+                enableDamping
+                dampingFactor={0.05}
+            />
         </>
     );
 }
@@ -898,88 +980,16 @@ export default function AlgorithmPage() {
     const [selectedOrb, setSelectedOrb] = useState<PositionedOrb | null>(null);
     const [orbSearchQuery, setOrbSearchQuery] = useState('');
     const [showOrbSearchDropdown, setShowOrbSearchDropdown] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
-    // Real data state
-    const [hierarchy, setHierarchy] = useState<HierarchyNode>(emptyHierarchy);
-    const [loading, setLoading] = useState(true);
-
-    // Fetch real campaign data from API
-    const fetchCampaignData = useCallback(async (userId: string) => {
-        try {
-            setLoading(true);
-            const response = await fetch(`/api/meta/campaigns?user_id=${userId}`);
-            const data = await response.json();
-
-            if (!data.connected || !data.campaigns || data.campaigns.length === 0) {
-                setHierarchy(emptyHierarchy);
-                return;
-            }
-
-            // Transform API data to HierarchyNode structure
-            const campaigns: HierarchyNode[] = data.campaigns.map((campaign: { id: string; name: string; insights?: { spend?: number; roas?: number }; adsets?: Array<{ id: string; name: string; insights?: { spend?: number; roas?: number }; ads?: Array<{ id: string; name: string; insights?: { ctr?: number; roas?: number } }> }> }) => {
-                const adsets: HierarchyNode[] = (campaign.adsets || []).map((adset: { id: string; name: string; insights?: { spend?: number; roas?: number }; ads?: Array<{ id: string; name: string; insights?: { ctr?: number; roas?: number } }> }) => {
-                    const creatives: HierarchyNode[] = (adset.ads || []).map((ad: { id: string; name: string; insights?: { ctr?: number; roas?: number } }) => ({
-                        id: ad.id,
-                        name: ad.name || 'Untitled Ad',
-                        type: 'creative' as const,
-                        metrics: {
-                            ctr: ad.insights?.ctr || 0,
-                            roas: ad.insights?.roas || 0,
-                        },
-                        children: [],
-                    }));
-
-                    return {
-                        id: adset.id,
-                        name: adset.name || 'Untitled Ad Set',
-                        type: 'adset' as const,
-                        metrics: {
-                            spend: adset.insights?.spend || 0,
-                            roas: adset.insights?.roas || 0,
-                        },
-                        children: creatives,
-                    };
-                });
-
-                return {
-                    id: campaign.id,
-                    name: campaign.name || 'Untitled Campaign',
-                    type: 'campaign' as const,
-                    metrics: {
-                        spend: campaign.insights?.spend || 0,
-                        roas: campaign.insights?.roas || 0,
-                    },
-                    children: adsets,
-                };
-            });
-
-            const totalSpend = campaigns.reduce((sum, c) => sum + (c.metrics.spend || 0), 0);
-
-            setHierarchy({
-                id: 'account',
-                name: 'Ad Account',
-                type: 'account',
-                metrics: { spend: totalSpend },
-                children: campaigns,
-            });
-        } catch (error) {
-            console.error('Error fetching campaign data:', error);
-            setHierarchy(emptyHierarchy);
-        } finally {
-            setLoading(false);
-        }
+    // Prevent hydration mismatch - only render after mount
+    useEffect(() => {
+        setMounted(true);
     }, []);
 
-    // Fetch data on mount and when user changes
-    useEffect(() => {
-        const userId = selectedUser?.id || profile?.id;
-        if (userId) {
-            fetchCampaignData(userId);
-        } else {
-            setHierarchy(emptyHierarchy);
-            setLoading(false);
-        }
-    }, [selectedUser, profile?.id, fetchCampaignData]);
+    const hierarchy = useMemo(() => {
+        return selectedUser ? getOtherUserHierarchy(selectedUser.full_name || selectedUser.email.split('@')[0]) : demoHierarchy;
+    }, [selectedUser]);
 
     const stats = useMemo(() => {
         const campaigns = hierarchy.children.length;
@@ -1010,8 +1020,11 @@ export default function AlgorithmPage() {
         setSearchQuery(q);
         if (q.length < 2) { setSearchResults([]); return; }
         setSearching(true);
-        const { data } = await supabase.from('profiles').select('id, email, full_name').or(`email.ilike.%${q}%,full_name.ilike.%${q}%`).neq('id', profile?.id || '').limit(5);
-        setSearchResults(data || []);
+        const dummy: SearchResult = { id: 'demo', email: 'test@demo.com', full_name: 'Test User' };
+        const { data } = await supabase.from('profiles').select('id, email, full_name').or(`email.ilike.%${q}%,full_name.ilike.%${q}%`).neq('id', profile?.id || '').limit(4);
+        const res = [...(data || [])];
+        if ('test'.includes(q.toLowerCase()) || 'demo'.includes(q.toLowerCase())) res.unshift(dummy);
+        setSearchResults(res.slice(0, 5));
         setSearching(false);
     }
 
@@ -1036,12 +1049,12 @@ export default function AlgorithmPage() {
                     <GlassCard className="p-4">
                         <div className="flex items-center gap-3">
                             <div className="relative w-10 h-10 rounded-xl overflow-hidden">
-                                <Image src="/logo.png" alt="ATHENA" fill className="object-cover" />
+                                <Image src="/logo.png" alt="ATHENA" fill sizes="40px" className="object-cover" />
                             </div>
                             <div>
                                 <h1 className="text-2xl font-bold"><span className="text-gradient">Algorithm</span></h1>
                                 <p className="text-xs text-[var(--text-secondary)]">
-                                    Hover orbs to see details • {stats.total} items
+                                    Hover orbs to see details • {mounted ? stats.total : '...'} items
                                 </p>
                             </div>
                         </div>
@@ -1053,15 +1066,15 @@ export default function AlgorithmPage() {
                     <GlassCard className="px-3 py-2 flex items-center gap-3 text-[10px]">
                         <div className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full" style={{ background: typeColors.campaign }} />
-                            <span>{stats.campaigns} Campaigns</span>
+                            <span>{mounted ? stats.campaigns : '-'} Campaigns</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <div className="w-1.5 h-1.5 rounded-full" style={{ background: typeColors.adset }} />
-                            <span>{stats.adsets} Ad Sets</span>
+                            <span>{mounted ? stats.adsets : '-'} Ad Sets</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <div className="w-1 h-1 rounded-full" style={{ background: typeColors.creative }} />
-                            <span>{stats.creatives} Creatives</span>
+                            <span>{mounted ? stats.creatives : '-'} Creatives</span>
                         </div>
                     </GlassCard>
                 </motion.div>

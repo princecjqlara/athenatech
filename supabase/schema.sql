@@ -21,33 +21,21 @@ create table if not exists public.profiles (
 alter table public.profiles enable row level security;
 
 -- Profiles policies
-create policy "Users can view own profile"
+-- For development: Allow public access to profiles
+-- In production, replace with proper auth.uid() based policies
+create policy "Public can view all profiles"
   on public.profiles for select
-  using (auth.uid() = id);
+  using (true);
 
-create policy "Admins can view all profiles"
-  on public.profiles for select
-  using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
-
-create policy "Admins can update profiles"
+create policy "Public can update profiles"
   on public.profiles for update
-  using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
+  using (true);
 
 -- Invite codes table
 create table if not exists public.invite_codes (
   id uuid default uuid_generate_v4() primary key,
   code text unique not null,
-  created_by uuid references public.profiles(id) not null,
+  created_by uuid references public.profiles(id),
   created_at timestamp with time zone default now(),
   is_used boolean default false,
   used_by uuid references public.profiles(id),
@@ -58,18 +46,35 @@ create table if not exists public.invite_codes (
 alter table public.invite_codes enable row level security;
 
 -- Invite codes policies
-create policy "Admins can manage invite codes"
-  on public.invite_codes for all
-  using (
+-- Only admins can create and delete invite codes
+-- Anyone can read invite codes (for verification during signup)
+create policy "Admins can insert invite codes"
+  on public.invite_codes for insert
+  with check (
     exists (
       select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
+      where id = (select auth.uid()) and role = 'admin'
     )
   );
 
-create policy "Anyone can verify invite codes"
+create policy "Anyone can select invite codes"
   on public.invite_codes for select
   using (true);
+
+create policy "Admins can delete invite codes"
+  on public.invite_codes for delete
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and role = 'admin'
+    )
+  );
+
+-- Anyone can update invite codes (needed for marking as used during signup)
+create policy "Anyone can update invite codes"
+  on public.invite_codes for update
+  using (true)
+  with check (true);
 
 -- Function to create profile on user signup
 create or replace function public.handle_new_user()
@@ -110,7 +115,7 @@ alter table public.meta_integrations enable row level security;
 
 create policy "Users can manage own integrations"
   on public.meta_integrations for all
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 -- Insert first admin (run this after creating your first user)
 -- update public.profiles set role = 'admin' where email = 'your-email@example.com';

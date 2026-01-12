@@ -19,7 +19,7 @@ ALTER TABLE public.meta_campaigns ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own campaigns"
     ON public.meta_campaigns FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_meta_campaigns_user ON public.meta_campaigns(user_id);
 
@@ -41,7 +41,7 @@ ALTER TABLE public.meta_adsets ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own adsets"
     ON public.meta_adsets FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_meta_adsets_user ON public.meta_adsets(user_id);
 CREATE INDEX IF NOT EXISTS idx_meta_adsets_campaign ON public.meta_adsets(campaign_id);
@@ -81,7 +81,7 @@ ALTER TABLE public.meta_ads ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own ads"
     ON public.meta_ads FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_meta_ads_user ON public.meta_ads(user_id);
 CREATE INDEX IF NOT EXISTS idx_meta_ads_campaign ON public.meta_ads(campaign_id);
@@ -112,7 +112,7 @@ ALTER TABLE public.meta_leads ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own leads"
     ON public.meta_leads FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_meta_leads_user ON public.meta_leads(user_id);
 CREATE INDEX IF NOT EXISTS idx_meta_leads_status ON public.meta_leads(status);

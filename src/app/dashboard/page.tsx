@@ -52,7 +52,7 @@ export default function DashboardPage() {
                 >
                     <div className="flex items-center gap-4 mb-2">
                         <div className="relative w-10 h-10 rounded-xl overflow-hidden">
-                            <Image src="/logo.png" alt="ATHENA" fill className="object-cover" />
+                            <Image src="/logo.png" alt="ATHENA" fill sizes="40px" className="object-cover" />
                         </div>
                         <h1 className="text-3xl font-bold">
                             <span className="text-gradient">ATHENA</span> Analytics

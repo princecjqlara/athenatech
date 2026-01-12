@@ -55,7 +55,7 @@ ALTER TABLE narrative_analysis ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can manage own narrative analysis" ON narrative_analysis;
 CREATE POLICY "Users can manage own narrative analysis"
     ON narrative_analysis FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 -- =====================================================
 -- CREATE DELIVERY SCORES TABLE (if not exists)
@@ -92,7 +92,7 @@ ALTER TABLE delivery_scores ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can manage own delivery scores" ON delivery_scores;
 CREATE POLICY "Users can manage own delivery scores"
     ON delivery_scores FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 
 -- =====================================================
@@ -139,7 +139,7 @@ ALTER TABLE tracking_anomalies ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own tracking anomalies"
     ON tracking_anomalies FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 
 -- =====================================================
@@ -171,7 +171,7 @@ ALTER TABLE fatigue_metrics ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own fatigue metrics"
     ON fatigue_metrics FOR ALL
-    USING (auth.uid() = user_id);
+    USING ((select auth.uid()) = user_id);
 
 
 -- =====================================================

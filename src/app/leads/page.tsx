@@ -23,12 +23,12 @@ import {
     Settings,
     GripVertical,
     Sparkles,
-    Check
+    Check,
+    RefreshCw
 } from 'lucide-react';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AIChatWidget } from '@/components/ui/AIChatWidget';
-import { useAuth } from '@/lib/auth';
 
 // Types
 interface Tag {
@@ -85,9 +85,13 @@ interface Lead {
     lastContactedAt?: string;
     conversationContext?: ConversationContext;
     extraDetails?: ExtraContactDetails;
-    // Ad attribution
-    adSource?: string;
+    // Ad Account Source
+    adAccountId?: string;
+    adAccountName?: string;
+    campaignId?: string;
+    campaignName?: string;
     adId?: string;
+    adName?: string;
 }
 
 interface StageEvent {
@@ -163,13 +167,137 @@ const availableTags: Tag[] = [
     { id: 'cold', name: 'Cold Lead', color: '#95A5A6' },
 ];
 
-// Helper to create empty pipeline stages
-const createInitialPipelineStages = (leads: Lead[] = []): PipelineStage[] => [
-    { id: 'new', name: 'New Leads', color: '#87CEEB', leads: leads.filter(l => l.status === 'new'), events: getDefaultEventsForStage('new') },
-    { id: 'contacted', name: 'Contacted', color: '#FFD580', leads: leads.filter(l => l.status === 'contacted'), events: getDefaultEventsForStage('contacted') },
-    { id: 'qualified', name: 'Qualified', color: '#90EE90', leads: leads.filter(l => l.status === 'qualified'), events: getDefaultEventsForStage('qualified') },
-    { id: 'converted', name: 'Converted', color: '#98FB98', leads: leads.filter(l => l.status === 'converted'), events: getDefaultEventsForStage('converted') },
-    { id: 'lost', name: 'Lost', color: '#FFB6C1', leads: leads.filter(l => l.status === 'lost'), events: getDefaultEventsForStage('lost') },
+// Dummy data with extended fields
+const dummyLeads: Lead[] = [
+    {
+        id: '1', name: 'John Smith', email: 'john@example.com', phone: '+1 555-0101',
+        status: 'new', source: 'Meta Ads', createdAt: '2026-01-09', value: 5000,
+        tags: [availableTags[0], availableTags[1]],
+        owner: 'Sales Team',
+        pageLink: 'https://facebook.com/business/123',
+        facebookId: 'fb_123456',
+        company: 'Smith Enterprises',
+        adAccountId: 'act_123456789',
+        adAccountName: 'Main Business Account',
+        campaignId: 'camp_001',
+        campaignName: 'Lead Gen - Premium',
+        adId: 'ad_001',
+        adName: 'Premium Package Video',
+        conversationContext: {
+            lastMessage: 'Hi, I\'m interested in your premium package',
+            lastMessageAt: '2026-01-09 14:30',
+            messageCount: 5,
+            aiSummary: 'Hot prospect interested in premium. Asked about pricing and timeline. Ready to schedule demo.',
+            sentiment: 'positive',
+            intent: 'Purchase premium package',
+            topics: ['Pricing', 'Timeline', 'Demo', 'Premium Features'],
+            nextAction: 'Schedule demo call within 24 hours',
+            engagementScore: 85,
+            painPoints: ['Current solution too slow', 'Needs better reporting'],
+            objections: ['Budget approval needed']
+        },
+        extraDetails: {
+            age: 35,
+            occupation: 'Marketing Director',
+            income: '$80k-$100k',
+            interests: ['Digital Marketing', 'SaaS Tools', 'Automation'],
+            preferredContact: 'email',
+            timezone: 'PST',
+            language: 'English',
+            customFields: [
+                { label: 'Decision Maker', value: 'Yes' },
+                { label: 'Team Size', value: '10-25' }
+            ]
+        }
+    },
+    {
+        id: '2', name: 'Sarah Johnson', email: 'sarah@company.com', phone: '+1 555-0102',
+        status: 'contacted', source: 'Website', createdAt: '2026-01-08', value: 12000,
+        tags: [availableTags[2]],
+        owner: 'Maria Garcia',
+        company: 'Johnson & Co',
+        lastContactedAt: '2026-01-09 10:00',
+        conversationContext: {
+            lastMessage: 'Thanks for the call, I\'ll review the proposal',
+            lastMessageAt: '2026-01-08 16:45',
+            messageCount: 12,
+            aiSummary: 'In decision phase. Comparing with competitors. Follow up next week.'
+        }
+    },
+    {
+        id: '3', name: 'Mike Chen', email: 'mike@startup.io', phone: '+1 555-0103',
+        status: 'qualified', source: 'Meta Ads', createdAt: '2026-01-07', value: 8500,
+        tags: [availableTags[3], availableTags[4]],
+        owner: 'John Doe',
+        pageLink: 'https://facebook.com/business/456',
+        company: 'Chen Startup',
+        address: '123 Tech Blvd, Silicon Valley',
+        conversationContext: {
+            lastMessage: 'Demo was great! Sending contracts tomorrow',
+            lastMessageAt: '2026-01-07 11:00',
+            messageCount: 25,
+            aiSummary: 'Very engaged. Demo completed successfully. Waiting for contract review.'
+        }
+    },
+    {
+        id: '4', name: 'Emily Davis', email: 'emily@tech.co', phone: '+1 555-0104',
+        status: 'converted', source: 'Referral', createdAt: '2026-01-06', value: 25000,
+        tags: [availableTags[1]],
+        owner: 'Maria Garcia',
+        company: 'Davis Tech',
+        notes: 'Premium customer - referred by Mike Chen',
+        conversationContext: {
+            lastMessage: 'Payment confirmed. Looking forward to onboarding!',
+            lastMessageAt: '2026-01-06 09:15',
+            messageCount: 45,
+            aiSummary: 'Completed purchase of premium package. High satisfaction. Potential for upsell.'
+        }
+    },
+    {
+        id: '5', name: 'Alex Wilson', email: 'alex@agency.com', phone: '+1 555-0105',
+        status: 'lost', source: 'Meta Ads', createdAt: '2026-01-05', value: 3000,
+        tags: [availableTags[5]],
+        owner: 'Sales Team',
+        conversationContext: {
+            lastMessage: 'Budget constraints, maybe next quarter',
+            lastMessageAt: '2026-01-05 13:30',
+            messageCount: 8,
+            aiSummary: 'Lost due to budget. Re-engage in Q2. Expressed continued interest.'
+        }
+    },
+    {
+        id: '6', name: 'Lisa Brown', email: 'lisa@brand.com', phone: '+1 555-0106',
+        status: 'new', source: 'Website', createdAt: '2026-01-04', value: 7500,
+        owner: 'Sales Team',
+        company: 'Brown Brands',
+        conversationContext: {
+            lastMessage: 'Just filled the contact form',
+            lastMessageAt: '2026-01-04 08:00',
+            messageCount: 1,
+        }
+    },
+    {
+        id: '7', name: 'David Lee', email: 'david@corp.com', phone: '+1 555-0107',
+        status: 'contacted', source: 'Meta Ads', createdAt: '2026-01-03', value: 15000,
+        tags: [availableTags[0], availableTags[2]],
+        owner: 'John Doe',
+        pageLink: 'https://facebook.com/business/789',
+        company: 'Lee Corporation',
+        conversationContext: {
+            lastMessage: 'Can we schedule a call for tomorrow?',
+            lastMessageAt: '2026-01-03 17:00',
+            messageCount: 7,
+            aiSummary: 'Active engagement. Scheduling call. High-value enterprise prospect.'
+        }
+    },
+];
+
+const createInitialPipelineStages = (): PipelineStage[] => [
+    { id: 'new', name: 'New Leads', color: '#87CEEB', leads: dummyLeads.filter(l => l.status === 'new'), events: getDefaultEventsForStage('new') },
+    { id: 'contacted', name: 'Contacted', color: '#FFD580', leads: dummyLeads.filter(l => l.status === 'contacted'), events: getDefaultEventsForStage('contacted') },
+    { id: 'qualified', name: 'Qualified', color: '#90EE90', leads: dummyLeads.filter(l => l.status === 'qualified'), events: getDefaultEventsForStage('qualified') },
+    { id: 'converted', name: 'Converted', color: '#98FB98', leads: dummyLeads.filter(l => l.status === 'converted'), events: getDefaultEventsForStage('converted') },
+    { id: 'lost', name: 'Lost', color: '#FFB6C1', leads: dummyLeads.filter(l => l.status === 'lost'), events: getDefaultEventsForStage('lost') },
 ];
 
 const statusColors: Record<Lead['status'], string> = {
@@ -296,7 +424,8 @@ function LeadDetailsModal({
     onDelete,
     onAddTag,
     onRemoveTag,
-    allTags
+    allTags,
+    onUpdateConversationContext
 }: {
     lead: Lead;
     onClose: () => void;
@@ -305,8 +434,63 @@ function LeadDetailsModal({
     onAddTag: (tagId: string) => void;
     onRemoveTag: (tagId: string) => void;
     allTags: Tag[];
+    onUpdateConversationContext?: (context: ConversationContext) => void;
 }) {
     const [showTagPicker, setShowTagPicker] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+
+    const handleAnalyzeConversation = async () => {
+        setIsAnalyzing(true);
+        setAiError(null);
+
+        try {
+            const response = await fetch('/api/ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'analyze_lead_conversation',
+                    data: {
+                        leadName: lead.name,
+                        conversationHistory: lead.conversationContext?.lastMessage
+                            ? [lead.conversationContext.lastMessage]
+                            : ['Initial contact - no conversation history yet'],
+                        currentStage: lead.status,
+                        leadSource: lead.source,
+                        adAccountName: lead.adAccountName,
+                    }
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success && result.analysis && onUpdateConversationContext) {
+                // Update the lead's conversation context with AI analysis
+                const updatedContext: ConversationContext = {
+                    ...lead.conversationContext,
+                    lastMessage: lead.conversationContext?.lastMessage || '',
+                    lastMessageAt: lead.conversationContext?.lastMessageAt || new Date().toISOString(),
+                    messageCount: lead.conversationContext?.messageCount || 1,
+                    aiSummary: result.analysis.summary,
+                    sentiment: result.analysis.sentiment,
+                    intent: result.analysis.intent,
+                    topics: result.analysis.topics,
+                    nextAction: result.analysis.nextAction,
+                    engagementScore: result.analysis.engagementScore,
+                    painPoints: result.analysis.painPoints,
+                    objections: result.analysis.objections,
+                };
+                onUpdateConversationContext(updatedContext);
+            } else {
+                setAiError(result.error || 'Analysis failed');
+            }
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            setAiError('Failed to connect to AI service');
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
 
     return (
         <motion.div
@@ -327,6 +511,23 @@ function LeadDetailsModal({
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold">Lead Details</h2>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleAnalyzeConversation}
+                            disabled={isAnalyzing}
+                            className="btn-secondary py-2 px-3 flex items-center gap-1 bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20"
+                        >
+                            {isAnalyzing ? (
+                                <>
+                                    <RefreshCw size={14} className="animate-spin" />
+                                    Analyzing...
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles size={14} />
+                                    AI Analyze
+                                </>
+                            )}
+                        </button>
                         <button onClick={onEdit} className="btn-secondary py-2 px-3 flex items-center gap-1">
                             <Edit size={14} />
                             Edit
@@ -339,6 +540,16 @@ function LeadDetailsModal({
                         </button>
                     </div>
                 </div>
+
+                {/* AI Error Alert */}
+                {aiError && (
+                    <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center justify-between">
+                        <span>{aiError}</span>
+                        <button onClick={() => setAiError(null)} className="hover:text-white">
+                            <X size={14} />
+                        </button>
+                    </div>
+                )}
 
                 {/* Lead Name & Status */}
                 <div className="flex items-center gap-4 mb-6">
@@ -409,15 +620,13 @@ function LeadDetailsModal({
                         <div className="flex items-center gap-2 text-[var(--text-muted)] text-xs mb-1">
                             <Mail size={12} /> EMAIL
                         </div>
-                        <div className="text-sm">
-                            {lead.email && !lead.email.includes('@facebook.com') ? lead.email : <span className="text-[var(--text-muted)]">N/A</span>}
-                        </div>
+                        <div className="text-sm">{lead.email}</div>
                     </div>
                     <div className="p-3 rounded-lg bg-[var(--glass-bg)]">
                         <div className="flex items-center gap-2 text-[var(--text-muted)] text-xs mb-1">
                             <Phone size={12} /> PHONE
                         </div>
-                        <div className="text-sm">{lead.phone || <span className="text-[var(--text-muted)]">N/A</span>}</div>
+                        <div className="text-sm">{lead.phone}</div>
                     </div>
                     {lead.owner && (
                         <div className="p-3 rounded-lg bg-[var(--glass-bg)]">
@@ -428,16 +637,6 @@ function LeadDetailsModal({
                     <div className="p-3 rounded-lg bg-[var(--glass-bg)]">
                         <div className="text-[var(--text-muted)] text-xs mb-1">SOURCE</div>
                         <div className="text-sm">{lead.source}</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-[var(--glass-bg)]">
-                        <div className="text-[var(--text-muted)] text-xs mb-1">AD SOURCE</div>
-                        <div className="text-sm">
-                            {lead.adSource ? (
-                                <span className="text-[var(--accent-primary)]">{lead.adSource}</span>
-                            ) : (
-                                <span className="text-[var(--text-muted)]">Organic / Direct</span>
-                            )}
-                        </div>
                     </div>
                     {lead.pageLink && (
                         <div className="p-3 rounded-lg bg-[var(--glass-bg)]">
@@ -455,7 +654,39 @@ function LeadDetailsModal({
                     )}
                 </div>
 
-                {/* AI Conversation Analysis */}
+                {/* Ad Account Source */}
+                {(lead.adAccountName || lead.campaignName || lead.adName) && (
+                    <div className="mb-6">
+                        <div className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2">
+                            <Activity size={12} className="text-blue-400" /> AD SOURCE
+                        </div>
+                        <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 space-y-3">
+                            {lead.adAccountName && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--text-muted)]">Ad Account</span>
+                                    <span className="text-sm font-medium text-blue-300">{lead.adAccountName}</span>
+                                </div>
+                            )}
+                            {lead.campaignName && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--text-muted)]">Campaign</span>
+                                    <span className="text-sm text-blue-200">{lead.campaignName}</span>
+                                </div>
+                            )}
+                            {lead.adName && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-[var(--text-muted)]">Ad</span>
+                                    <span className="text-sm text-blue-200">{lead.adName}</span>
+                                </div>
+                            )}
+                            {lead.adAccountId && (
+                                <div className="text-xs text-[var(--text-muted)] pt-2 border-t border-blue-500/20">
+                                    Account ID: {lead.adAccountId}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
                 {lead.conversationContext && (
                     <div className="mb-6">
                         <div className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2">
@@ -986,17 +1217,13 @@ function DraggableLeadCard({
 }
 
 export default function LeadsPage() {
-    // Get authenticated user
-    const { user } = useAuth();
-    const userId = user?.id;
-
     const [activeTab, setActiveTab] = useState<'leads' | 'pipelines'>('leads');
     const [searchQuery, setSearchQuery] = useState('');
     const [pipelineSearchQuery, setPipelineSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<Lead['status'] | 'all'>('all');
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
     const [selectedStage, setSelectedStage] = useState<PipelineStage | null>(null);
-    const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(createInitialPipelineStages([]));
+    const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(createInitialPipelineStages());
     const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
     const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
@@ -1023,83 +1250,15 @@ export default function LeadsPage() {
     // Edit/Delete Lead
     const [editingLead, setEditingLead] = useState<Lead | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<Lead | null>(null);
-    const [allLeads, setAllLeads] = useState<Lead[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [allLeads, setAllLeads] = useState<Lead[]>(dummyLeads);
 
-    // Bulk selection
-    const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
-    const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-
-    // AI Activity Log - starts empty, populated by real activity
-    const [aiActivityLog, setAiActivityLog] = useState<AIActivityLog[]>([]);
+    // AI Activity Log
+    const [aiActivityLog, setAiActivityLog] = useState<AIActivityLog[]>([
+        { id: '1', timestamp: '2026-01-09 14:35', action: 'message_analysis', leadId: '1', leadName: 'John Smith', details: 'Analyzed new message: High purchase intent detected' },
+        { id: '2', timestamp: '2026-01-09 10:15', action: 'stage_transfer', leadId: '2', leadName: 'Sarah Johnson', details: 'AI moved lead forward', fromValue: 'New', toValue: 'Contacted' },
+        { id: '3', timestamp: '2026-01-08 16:50', action: 'tag_added', leadId: '7', leadName: 'David Lee', details: 'Added tag: Hot Lead', toValue: 'Hot Lead' },
+    ]);
     const [showAiHistory, setShowAiHistory] = useState(false);
-
-    // Fetch leads from API on mount
-    useEffect(() => {
-        const fetchLeads = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
-
-                // User ID is passed as dependency from useAuth hook
-                if (!userId) {
-                    console.log('[Leads Page] No user ID available');
-                    setIsLoading(false);
-                    return;
-                }
-
-                const response = await fetch(`/api/meta/leads?user_id=${userId}&limit=1000`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch leads');
-                }
-
-                const data = await response.json();
-                console.log('[Leads Page] Fetched leads:', data.leads?.length || 0);
-
-                // Transform API leads to match Lead interface
-                const transformedLeads: Lead[] = (data.leads || []).map((apiLead: { id: string; name?: string; full_name?: string; email?: string; phone?: string; phone_number?: string; status?: string; source?: string; form_name?: string; created_time?: string; field_data?: Record<string, string>; ad_source?: string; ad_id?: string; ai_summary?: string; ai_sentiment?: string; ai_intent?: string; ai_analysis?: { summary?: string; sentiment?: string; intent?: string; topics?: string[]; next_action?: string; engagement_score?: number; pain_points?: string[]; objections?: string[] } }) => ({
-                    id: apiLead.id,
-                    name: apiLead.name || apiLead.full_name || 'Unknown',
-                    email: apiLead.email || '',
-                    phone: apiLead.phone || apiLead.phone_number || '',
-                    status: (apiLead.status || 'new') as Lead['status'],
-                    source: apiLead.source || apiLead.form_name || 'Meta Ads',
-                    createdAt: apiLead.created_time ? new Date(apiLead.created_time).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                    value: 0,
-                    tags: [],
-                    owner: 'Sales Team',
-                    facebookId: apiLead.id,
-                    // Ad attribution
-                    adSource: apiLead.ad_source || undefined,
-                    adId: apiLead.ad_id || undefined,
-                    conversationContext: (apiLead.ai_summary || apiLead.ai_analysis) ? {
-                        lastMessage: '',
-                        lastMessageAt: '',
-                        messageCount: 0,
-                        aiSummary: apiLead.ai_summary || apiLead.ai_analysis?.summary,
-                        sentiment: (apiLead.ai_sentiment || apiLead.ai_analysis?.sentiment) as 'positive' | 'neutral' | 'negative' | 'mixed' | undefined,
-                        intent: apiLead.ai_intent || apiLead.ai_analysis?.intent,
-                        topics: apiLead.ai_analysis?.topics,
-                        nextAction: apiLead.ai_analysis?.next_action,
-                        engagementScore: apiLead.ai_analysis?.engagement_score,
-                        painPoints: apiLead.ai_analysis?.pain_points,
-                        objections: apiLead.ai_analysis?.objections,
-                    } : undefined,
-                }));
-
-                setAllLeads(transformedLeads);
-                setPipelineStages(createInitialPipelineStages(transformedLeads));
-            } catch (err) {
-                console.error('Error fetching leads:', err);
-                setError(err instanceof Error ? err.message : 'Failed to fetch leads');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchLeads();
-    }, [userId]);
 
     // Lead CRUD handlers
     const handleUpdateLead = (updatedLead: Lead) => {
@@ -1139,59 +1298,6 @@ export default function LeadsPage() {
                 leadName: lead.name,
                 details: 'Lead deleted',
             }, ...log]);
-        }
-    };
-
-    // Toggle lead selection for bulk operations
-    const toggleLeadSelection = (leadId: string) => {
-        setSelectedLeads(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(leadId)) {
-                newSet.delete(leadId);
-            } else {
-                newSet.add(leadId);
-            }
-            return newSet;
-        });
-    };
-
-    // Select/deselect all leads
-    const toggleSelectAll = () => {
-        if (selectedLeads.size === allLeads.length) {
-            setSelectedLeads(new Set());
-        } else {
-            setSelectedLeads(new Set(allLeads.map(l => l.id)));
-        }
-    };
-
-    // Bulk delete leads
-    const handleBulkDelete = async () => {
-        if (!userId || selectedLeads.size === 0) return;
-
-        try {
-            const response = await fetch('/api/meta/leads/bulk-delete', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: userId,
-                    lead_ids: Array.from(selectedLeads),
-                }),
-            });
-
-            if (response.ok) {
-                // Remove from local state
-                setAllLeads(leads => leads.filter(l => !selectedLeads.has(l.id)));
-                setPipelineStages(stages => stages.map(s => ({
-                    ...s,
-                    leads: s.leads.filter(l => !selectedLeads.has(l.id))
-                })));
-                setSelectedLeads(new Set());
-                setShowBulkDeleteConfirm(false);
-            } else {
-                console.error('Failed to delete leads');
-            }
-        } catch (e) {
-            console.error('Bulk delete error:', e);
         }
     };
 
@@ -1711,44 +1817,11 @@ export default function LeadsPage() {
                                 </select>
                             </div>
 
-                            {/* Bulk Actions Bar */}
-                            {selectedLeads.size > 0 && (
-                                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between">
-                                    <span className="text-sm text-red-400">
-                                        {selectedLeads.size} lead{selectedLeads.size > 1 ? 's' : ''} selected
-                                    </span>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setSelectedLeads(new Set())}
-                                            className="btn-secondary py-1.5 px-3 text-sm"
-                                        >
-                                            Clear Selection
-                                        </button>
-                                        <button
-                                            onClick={() => setShowBulkDeleteConfirm(true)}
-                                            className="py-1.5 px-3 text-sm rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors flex items-center gap-1"
-                                        >
-                                            <Trash2 size={14} />
-                                            Delete Selected
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Leads Table */}
                             <GlassCard className="overflow-hidden">
                                 <table className="w-full">
                                     <thead>
                                         <tr className="border-b border-[var(--glass-border)]">
-                                            <th className="p-4 w-12">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedLeads.size === allLeads.length && allLeads.length > 0}
-                                                    onChange={toggleSelectAll}
-                                                    className="w-4 h-4 rounded accent-[var(--accent-primary)] cursor-pointer"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                            </th>
                                             <th className="text-left p-4 text-sm font-semibold text-[var(--text-secondary)]">
                                                 <div className="flex items-center gap-2 cursor-pointer hover:text-[var(--text-primary)]">
                                                     Name
@@ -1770,18 +1843,9 @@ export default function LeadsPage() {
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 transition={{ delay: index * 0.05 }}
-                                                className={`border-b border-[var(--glass-border)] hover:bg-[var(--accent-soft)] transition-colors cursor-pointer ${selectedLeads.has(lead.id) ? 'bg-[var(--accent-primary)]/5' : ''}`}
+                                                className="border-b border-[var(--glass-border)] hover:bg-[var(--accent-soft)] transition-colors cursor-pointer"
                                                 onClick={() => setSelectedLead(lead)}
                                             >
-                                                <td className="p-4">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedLeads.has(lead.id)}
-                                                        onChange={() => toggleLeadSelection(lead.id)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className="w-4 h-4 rounded accent-[var(--accent-primary)] cursor-pointer"
-                                                    />
-                                                </td>
                                                 <td className="p-4">
                                                     <div className="font-medium">{lead.name}</div>
                                                 </td>
@@ -2276,49 +2340,6 @@ export default function LeadsPage() {
                                 >
                                     Done
                                 </button>
-                            </motion.div>
-                        </motion.div>
-                    )}
-
-                    {/* Bulk Delete Confirmation Modal */}
-                    {showBulkDeleteConfirm && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                            onClick={() => setShowBulkDeleteConfirm(false)}
-                        >
-                            <motion.div
-                                initial={{ scale: 0.9, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.9, opacity: 0 }}
-                                className="bg-[var(--bg-secondary)] border border-red-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                                        <Trash2 size={20} className="text-red-400" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold text-lg">Delete {selectedLeads.size} Lead{selectedLeads.size > 1 ? 's' : ''}?</h3>
-                                        <p className="text-sm text-[var(--text-muted)]">This action cannot be undone</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-3 mt-6">
-                                    <button
-                                        onClick={() => setShowBulkDeleteConfirm(false)}
-                                        className="btn-secondary flex-1"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleBulkDelete}
-                                        className="flex-1 py-2 px-4 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
                             </motion.div>
                         </motion.div>
                     )}

@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
                 return await generateRecommendations(data);
             case 'extract_features':
                 return await extractFeatures(data);
-            case 'analyze_lead':
-                return await analyzeLead(data);
+            case 'analyze_lead_conversation':
+                return await analyzeLeadConversation(data);
             default:
                 return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
         }
@@ -115,6 +115,102 @@ Provide recommendations in JSON format:
     }
 }
 
+async function analyzeLeadConversation(data: {
+    leadName: string;
+    conversationHistory: string[];
+    currentStage: string;
+    leadSource?: string;
+    adAccountName?: string;
+}) {
+    console.log('[AI API] Analyzing lead conversation:', data.leadName);
+
+    const conversationText = data.conversationHistory?.join('\n') || 'No conversation history available';
+
+    const prompt = `You are an expert sales analyst and CRM specialist. Analyze this lead conversation and classify the lead for pipeline management.
+
+Lead Information:
+- Name: ${data.leadName}
+- Current Stage: ${data.currentStage}
+- Source: ${data.leadSource || 'Unknown'}
+- Ad Account: ${data.adAccountName || 'Unknown'}
+
+Conversation History:
+${conversationText}
+
+Analyze this conversation and provide your assessment in the following JSON format:
+{
+    "summary": "Brief 1-2 sentence summary of the conversation and lead status",
+    "sentiment": "positive" | "neutral" | "negative" | "mixed",
+    "intent": "What the lead is trying to achieve",
+    "engagementScore": 0-100,
+    "suggestedStage": "new" | "contacted" | "qualified" | "converted" | "lost",
+    "stageConfidence": 0-100,
+    "stageReason": "Why this stage is recommended",
+    "topics": ["array", "of", "discussed", "topics"],
+    "painPoints": ["identified", "pain", "points"],
+    "objections": ["identified", "objections"],
+    "nextAction": "Specific recommended next step",
+    "priority": "high" | "medium" | "low",
+    "qualificationScore": {
+        "budget": "confirmed" | "likely" | "unknown" | "unlikely",
+        "authority": "confirmed" | "likely" | "unknown" | "unlikely",
+        "need": "confirmed" | "likely" | "unknown" | "unlikely",
+        "timeline": "confirmed" | "likely" | "unknown" | "unlikely"
+    }
+}
+
+Be specific and actionable in your analysis. Focus on sales-relevant insights.`;
+
+    try {
+        const response = await callNvidiaAI(prompt);
+
+        // Parse the response
+        let analysis;
+        try {
+            // Try to extract JSON from the response
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                analysis = JSON.parse(jsonMatch[0]);
+            } else {
+                analysis = JSON.parse(response);
+            }
+        } catch {
+            // If parsing fails, return a structured fallback
+            analysis = {
+                summary: response.slice(0, 200),
+                sentiment: 'neutral',
+                intent: 'Unknown',
+                engagementScore: 50,
+                suggestedStage: data.currentStage,
+                stageConfidence: 50,
+                stageReason: 'Unable to determine from conversation',
+                topics: [],
+                painPoints: [],
+                objections: [],
+                nextAction: 'Follow up with lead',
+                priority: 'medium',
+                qualificationScore: {
+                    budget: 'unknown',
+                    authority: 'unknown',
+                    need: 'unknown',
+                    timeline: 'unknown'
+                }
+            };
+        }
+
+        return NextResponse.json({
+            success: true,
+            analysis,
+        });
+    } catch (error) {
+        console.error('[AI API] Lead conversation analysis error:', error);
+        return NextResponse.json({
+            success: false,
+            error: 'Failed to analyze conversation',
+        }, { status: 500 });
+    }
+}
+
 async function extractFeatures(data: { mediaUrl?: string; mediaType?: string }) {
     console.log('[AI API] Extracting features from:', data);
 
@@ -152,127 +248,6 @@ async function extractFeatures(data: { mediaUrl?: string; mediaType?: string }) 
     });
 }
 
-/**
- * Analyze a lead's data and extract contact details + conversation insights
- */
-async function analyzeLead(data: {
-    leadId: string;
-    fieldData: { name: string; values: string[] }[];
-    campaignName?: string;
-    adName?: string;
-}) {
-    console.log('[AI API] Analyzing lead:', data.leadId);
-
-    // Extract field data into readable format
-    const fieldSummary = data.fieldData
-        .map(f => `${f.name}: ${f.values.join(', ')}`)
-        .join('\n');
-
-    const prompt = `You are an expert lead analyst and sales consultant. Analyze this lead form submission and provide comprehensive insights.
-
-Lead Form Data:
-${fieldSummary}
-
-Campaign: ${data.campaignName || 'Unknown'}
-Ad: ${data.adName || 'Unknown'}
-
-Provide analysis in the following JSON format:
-{
-  "contact_details": {
-    "full_name": "extracted name or null",
-    "email": "extracted email or null",
-    "phone": "extracted phone or null",
-    "company": "extracted company or null",
-    "job_title": "extracted job title or null",
-    "location": "extracted location or null",
-    "age": "extracted or estimated age or null",
-    "interests": ["extracted interests"]
-  },
-  "conversation_analysis": {
-    "summary": "brief summary of what the lead is interested in",
-    "sentiment": "positive/neutral/negative",
-    "intent": "purchase/inquiry/browsing/comparison",
-    "urgency": "high/medium/low",
-    "topics_discussed": ["topic1", "topic2"],
-    "pain_points": ["pain point if any"],
-    "objections": ["objection if any"]
-  },
-  "engagement_score": 0-100,
-  "lead_quality": "hot/warm/cold",
-  "next_actions": [
-    {
-      "action": "recommended action",
-      "priority": "high/medium/low",
-      "reason": "why this action"
-    }
-  ],
-  "preferred_contact_method": "email/phone/whatsapp",
-  "best_contact_time": "morning/afternoon/evening/anytime"
-}`;
-
-    try {
-        const response = await callNvidiaAI(prompt);
-        return NextResponse.json({
-            success: true,
-            analysis: response,
-        });
-    } catch (error) {
-        console.error('[AI API] Lead analysis error:', error);
-        // Return a fallback analysis
-        return NextResponse.json({
-            success: true,
-            analysis: JSON.stringify({
-                contact_details: extractContactDetailsManually(data.fieldData),
-                conversation_analysis: {
-                    summary: 'Lead submitted form from ad campaign',
-                    sentiment: 'neutral',
-                    intent: 'inquiry',
-                    urgency: 'medium',
-                    topics_discussed: [],
-                    pain_points: [],
-                    objections: [],
-                },
-                engagement_score: 50,
-                lead_quality: 'warm',
-                next_actions: [
-                    { action: 'Follow up within 24 hours', priority: 'high', reason: 'Fresh lead' }
-                ],
-                preferred_contact_method: 'email',
-                best_contact_time: 'anytime',
-            }),
-        });
-    }
-}
-
-/**
- * Extract contact details manually from field data as fallback
- */
-function extractContactDetailsManually(fieldData: { name: string; values: string[] }[]) {
-    const findField = (patterns: string[]) => {
-        for (const pattern of patterns) {
-            const field = fieldData.find(f =>
-                f.name.toLowerCase().includes(pattern.toLowerCase())
-            );
-            if (field && field.values.length > 0) {
-                return field.values[0];
-            }
-        }
-        return null;
-    };
-
-    return {
-        full_name: findField(['name', 'full_name', 'fullname']) ||
-            `${findField(['first_name', 'firstname']) || ''} ${findField(['last_name', 'lastname']) || ''}`.trim() || null,
-        email: findField(['email', 'e-mail', 'mail']),
-        phone: findField(['phone', 'mobile', 'tel', 'contact_number']),
-        company: findField(['company', 'business', 'organization']),
-        job_title: findField(['job', 'title', 'position', 'role']),
-        location: findField(['city', 'location', 'address', 'country']),
-        age: findField(['age', 'birthday', 'dob']),
-        interests: [],
-    };
-}
-
 async function callNvidiaAI(prompt: string): Promise<string> {
     if (!NVIDIA_API_KEY) {
         console.warn('[AI API] NVIDIA API key not configured, using mock response');
@@ -303,7 +278,7 @@ async function callNvidiaAI(prompt: string): Promise<string> {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            model: 'meta/llama-3.1-70b-instruct',
+            model: 'nvidia/llama-3.1-nemotron-70b-instruct',
             messages: [
                 {
                     role: 'system',
@@ -320,9 +295,7 @@ async function callNvidiaAI(prompt: string): Promise<string> {
     });
 
     if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error(`[AI API] NVIDIA API error ${response.status}:`, errorText);
-        throw new Error(`NVIDIA API error: ${response.status} - ${errorText.substring(0, 200)}`);
+        throw new Error(`NVIDIA API error: ${response.status}`);
     }
 
     const result = await response.json();

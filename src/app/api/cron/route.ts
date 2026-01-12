@@ -199,67 +199,33 @@ async function syncAllActiveIntegrations(supabase: any) {
  * Process any pending leads
  */
 async function processLeads(supabase: any) {
-    console.log('[Cron] Processing pending leads for AI analysis...');
+    console.log('[Cron] Processing pending leads...');
 
-    // Get leads that haven't been analyzed yet (no ai_summary)
+    // Get leads that haven't been processed yet (status = 'new')
     const { data: pendingLeads, error } = await supabase
         .from('meta_leads')
         .select('*')
-        .is('ai_summary', null)
-        .limit(100);
+        .eq('status', 'new')
+        .limit(50);
 
     if (error) {
         console.error('[Cron] Error fetching pending leads:', error);
         return;
     }
 
-    let analyzed = 0;
     for (const lead of pendingLeads || []) {
         try {
-            // Get AI analysis
-            const baseUrl = process.env.NEXT_PUBLIC_NGROK_URL || process.env.NEXT_PUBLIC_APP_URL || '';
-            const aiResponse = await fetch(`${baseUrl}/api/ai`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'analyze_lead',
-                    data: {
-                        leadId: lead.id,
-                        fieldData: lead.field_data || [],
-                    },
-                }),
-            });
+            // Mark as processing
+            await supabase
+                .from('meta_leads')
+                .update({ status: 'contacted' })
+                .eq('id', lead.id);
 
-            if (aiResponse.ok) {
-                const aiData = await aiResponse.json();
-                if (aiData.success && aiData.analysis) {
-                    const analysis = typeof aiData.analysis === 'string'
-                        ? JSON.parse(aiData.analysis)
-                        : aiData.analysis;
-
-                    await supabase
-                        .from('meta_leads')
-                        .update({
-                            full_name: analysis?.contact_details?.full_name || lead.full_name,
-                            email: analysis?.contact_details?.email || lead.email,
-                            phone: analysis?.contact_details?.phone || lead.phone,
-                            ai_summary: analysis?.conversation_analysis?.summary,
-                            ai_sentiment: analysis?.conversation_analysis?.sentiment,
-                            ai_intent: analysis?.conversation_analysis?.intent,
-                            lead_quality: analysis?.lead_quality,
-                            engagement_score: analysis?.engagement_score,
-                            next_actions: analysis?.next_actions,
-                        })
-                        .eq('id', lead.id);
-
-                    analyzed++;
-                    console.log('[Cron] Analyzed lead:', lead.id);
-                }
-            }
+            console.log('[Cron] Processed lead:', lead.id);
         } catch (e) {
-            console.error('[Cron] Error analyzing lead:', lead.id, e);
+            console.error('[Cron] Error processing lead:', lead.id, e);
         }
     }
 
-    console.log('[Cron] Processed', analyzed, 'leads with AI analysis');
+    console.log('[Cron] Processed', pendingLeads?.length || 0, 'leads');
 }
