@@ -1010,7 +1010,7 @@ export default function AlgorithmPage() {
         fetchCampaigns();
     }, [profile?.id]);
 
-<<<<<<< HEAD
+
     const hierarchy = useMemo(() => {
         // Use real synced data if available, otherwise empty hierarchy
         if (realHierarchy && realHierarchy.children.length > 0) {
@@ -1018,89 +1018,6 @@ export default function AlgorithmPage() {
         }
         return emptyHierarchy;
     }, [realHierarchy]);
-=======
-    // Real data state
-    const [hierarchy, setHierarchy] = useState<HierarchyNode>(emptyHierarchy);
-    const [loading, setLoading] = useState(true);
-
-    // Fetch real campaign data from API
-    const fetchCampaignData = useCallback(async (userId: string) => {
-        try {
-            setLoading(true);
-            const response = await fetch(`/api/meta/campaigns?user_id=${userId}`);
-            const data = await response.json();
-
-            if (!data.connected || !data.campaigns || data.campaigns.length === 0) {
-                setHierarchy(emptyHierarchy);
-                return;
-            }
-
-            // Transform API data to HierarchyNode structure
-            const campaigns: HierarchyNode[] = data.campaigns.map((campaign: { id: string; name: string; insights?: { spend?: number; roas?: number }; adsets?: Array<{ id: string; name: string; insights?: { spend?: number; roas?: number }; ads?: Array<{ id: string; name: string; insights?: { ctr?: number; roas?: number } }> }> }) => {
-                const adsets: HierarchyNode[] = (campaign.adsets || []).map((adset: { id: string; name: string; insights?: { spend?: number; roas?: number }; ads?: Array<{ id: string; name: string; insights?: { ctr?: number; roas?: number } }> }) => {
-                    const creatives: HierarchyNode[] = (adset.ads || []).map((ad: { id: string; name: string; insights?: { ctr?: number; roas?: number } }) => ({
-                        id: ad.id,
-                        name: ad.name || 'Untitled Ad',
-                        type: 'creative' as const,
-                        metrics: {
-                            ctr: ad.insights?.ctr || 0,
-                            roas: ad.insights?.roas || 0,
-                        },
-                        children: [],
-                    }));
-
-                    return {
-                        id: adset.id,
-                        name: adset.name || 'Untitled Ad Set',
-                        type: 'adset' as const,
-                        metrics: {
-                            spend: adset.insights?.spend || 0,
-                            roas: adset.insights?.roas || 0,
-                        },
-                        children: creatives,
-                    };
-                });
-
-                return {
-                    id: campaign.id,
-                    name: campaign.name || 'Untitled Campaign',
-                    type: 'campaign' as const,
-                    metrics: {
-                        spend: campaign.insights?.spend || 0,
-                        roas: campaign.insights?.roas || 0,
-                    },
-                    children: adsets,
-                };
-            });
-
-            const totalSpend = campaigns.reduce((sum, c) => sum + (c.metrics.spend || 0), 0);
-
-            setHierarchy({
-                id: 'account',
-                name: 'Ad Account',
-                type: 'account',
-                metrics: { spend: totalSpend },
-                children: campaigns,
-            });
-        } catch (error) {
-            console.error('Error fetching campaign data:', error);
-            setHierarchy(emptyHierarchy);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Fetch data on mount and when user changes
-    useEffect(() => {
-        const userId = selectedUser?.id || profile?.id;
-        if (userId) {
-            fetchCampaignData(userId);
-        } else {
-            setHierarchy(emptyHierarchy);
-            setLoading(false);
-        }
-    }, [selectedUser, profile?.id, fetchCampaignData]);
->>>>>>> b214f4e (Update algorithm page and add athena-app)
 
     const stats = useMemo(() => {
         const campaigns = hierarchy.children.length;
@@ -1127,30 +1044,8 @@ export default function AlgorithmPage() {
         return results.slice(0, 6);
     }, [hierarchy, orbSearchQuery]);
 
-<<<<<<< HEAD
+
     // User search functions removed - only showing current user's data
-=======
-    async function handleSearch(q: string) {
-        setSearchQuery(q);
-        if (q.length < 2) { setSearchResults([]); return; }
-        setSearching(true);
-        const { data } = await supabase.from('profiles').select('id, email, full_name').or(`email.ilike.%${q}%,full_name.ilike.%${q}%`).neq('id', profile?.id || '').limit(5);
-        setSearchResults(data || []);
-        setSearching(false);
-    }
-
-    function selectUser(u: SearchResult) {
-        setTransitioning(true);
-        setTimeout(() => { setSelectedUser(u); setSearchQuery(''); setSearchResults([]); setShowSearch(false); }, 600);
-        setTimeout(() => setTransitioning(false), 1500);
-    }
-
-    function clearSelection() {
-        setTransitioning(true);
-        setTimeout(() => setSelectedUser(null), 600);
-        setTimeout(() => setTransitioning(false), 1500);
-    }
->>>>>>> b214f4e (Update algorithm page and add athena-app)
 
     return (
         <div className="flex">

@@ -9,7 +9,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
  */
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
-    const userId = searchParams.get('user_id');
+    let userId = searchParams.get('user_id');
 
     if (!userId) {
         return NextResponse.json({ error: 'Missing user_id' }, { status: 400 });
@@ -17,6 +17,23 @@ export async function GET(request: NextRequest) {
 
     try {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        // DEV BYPASS: If dev user ID, find any user with Meta integration
+        const isDevUser = userId === '00000000-0000-0000-0000-000000000001';
+
+        if (isDevUser) {
+            // Find any user with an active Meta integration
+            const { data: anyIntegration } = await supabase
+                .from('meta_integrations')
+                .select('user_id')
+                .eq('is_active', true)
+                .limit(1)
+                .single();
+
+            if (anyIntegration) {
+                userId = anyIntegration.user_id;
+            }
+        }
 
         // Check if user has Meta integration
         const { data: integration, error: integrationError } = await supabase

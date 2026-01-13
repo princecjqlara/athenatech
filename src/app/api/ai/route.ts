@@ -52,11 +52,7 @@ Provide analysis in the following JSON format:
   ],
   "risk_factors": [
     "risk 1 if any"
-  ],
-  "predicted_performance": {
-    "ctr_estimate": "above_average/average/below_average",
-    "thumbstop_potential": "high/medium/low"
-  }
+  ]
 }`;
 
     try {
@@ -264,10 +260,6 @@ async function callNvidiaAI(prompt: string): Promise<string> {
                 'Text overlay is well-positioned for mobile viewing',
             ],
             risk_factors: [],
-            predicted_performance: {
-                ctr_estimate: 'above_average',
-                thumbstop_potential: 'high',
-            },
         });
     }
 

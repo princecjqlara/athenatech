@@ -66,8 +66,6 @@ import {
 } from 'recharts';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { UploadCreativeModal } from '@/components/ui/UploadCreativeModal';
-import { StructureFingerprint } from '@/lib/creativeExtractor';
 import { NarrativeChecklistForm } from '@/components/ui/NarrativeChecklistForm';
 import {
     checkNarrativeEligibility,
@@ -475,124 +473,8 @@ export default function AdsPage() {
     // Creative System Diagnostics State
     const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null);
     const [showInputMode, setShowInputMode] = useState(false);
-    const [showUploadModal, setShowUploadModal] = useState(false);
 
-    // Handler for when a creative is extracted from upload
-    const handleCreativeExtracted = (fingerprint: StructureFingerprint, file: File, previewUrl: string) => {
-        // Create a new creative from the extracted fingerprint
-        const newCreative: Creative = {
-            id: `cr-${Date.now()}`,
-            name: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
-            type: fingerprint.type as 'video' | 'image',
-            thumbnailUrl: previewUrl,
-            deliveryScore: fingerprint.type === 'video'
-                ? Math.round((fingerprint.avg_motion_0_1s || 0.5) * 50 + (fingerprint.brightness_avg || 0.5) * 30 + (1 - (fingerprint.silence_ratio || 0.5)) * 20)
-                : Math.round((fingerprint.brightness_avg || 0.5) * 50 + (fingerprint.contrast_avg || 0.5) * 30 + (fingerprint.edge_density || 0.5) * 20),
-            structureRating: fingerprint.confidence === 'high' ? 'A' : fingerprint.confidence === 'medium' ? 'B' : 'C',
-            status: 'analyzed',
-            placement: 'Uploaded',
-            deliveryHealth: fingerprint.motion_intensity === 'high' || fingerprint.type === 'image' ? 'healthy' : fingerprint.motion_intensity === 'medium' ? 'risky' : 'poor',
-            conversionHealth: 'insufficient', // New upload, no conversion data yet
-            structureAnalysis: {
-                motionOnsetTiming: fingerprint.motion_onset_ms || 0,
-                motionIntensity: fingerprint.motion_intensity,
-                cutDensity: fingerprint.cut_density || 0,
-                shotLengthAvg: fingerprint.avg_shot_length_opening || 0,
-                textPresence: { areaPct: fingerprint.text_area_pct || 0, timing: 0, position: 'unknown' },
-                brightnessScore: Math.round((fingerprint.brightness_avg || 0.5) * 100),
-                audioStartTiming: fingerprint.audio_onset_ms || 0,
-                loudnessCurve: fingerprint.silence_ratio !== undefined && fingerprint.silence_ratio < 0.5 ? 'rising' : 'flat',
-                silenceRatio: fingerprint.silence_ratio || 1,
-                speechEarly: fingerprint.speech_early || false,
-                speechStartTime: fingerprint.audio_onset_ms || 0,
-                wordsPerSecond: 0,
-                pauseDensity: 0,
-                deliveryProbability: fingerprint.type === 'video'
-                    ? Math.round((fingerprint.avg_motion_0_1s || 0.5) * 50 + (fingerprint.brightness_avg || 0.5) * 30 + (1 - (fingerprint.silence_ratio || 0.5)) * 20)
-                    : Math.round((fingerprint.brightness_avg || 0.5) * 50 + (fingerprint.contrast_avg || 0.5) * 30 + (fingerprint.edge_density || 0.5) * 20),
-                attentionBreakpoints: fingerprint.motion_onset_ms && fingerprint.motion_onset_ms > 500 ? ['Slow motion start'] : [],
-                structuralFixes: fingerprint.motion_onset_ms && fingerprint.motion_onset_ms > 500
-                    ? ['Add motion in first 500ms']
-                    : fingerprint.brightness_avg && fingerprint.brightness_avg < 0.3
-                        ? ['Increase brightness']
-                        : [],
-            },
-            // No conversion data yet for new uploads
-            conversionAnalysis: {
-                inputSource: 'manual',
-                spend: 0,
-                impressions: 0,
-                clicks: 0,
-                ctr: 0,
-                cpm: 0,
-                cpc: 0,
-                cpa: 0,
-                cvr: 0,
-                roas: 0,
-                value: 0,
-                conversions: 0,
-                leads: 0,
-                efficiencyScore: 0,
-                cpaEfficiency: 0,
-                roasEfficiency: 0,
-                confidence: 'insufficient',
-                confidenceReason: 'New upload - no performance data yet',
-                sampleSize: 0,
-                trend: 'stable',
-                trendPeriod: '7d',
-                alerts: [],
-                funnelDropoffs: [],
-                funnelSource: 'estimated',
-                primaryIssue: 'none',
-                recommendations: ['Run this creative to gather performance data'],
-            },
-            narrativeAnalysis: {
-                // CTA Atomic Fields
-                ctaPresent: false,
-                ctaHasActionVerb: false,
-                ctaHasOutcome: false,
-                ctaHasUrgency: false,
-
-                // Value Proposition Atomic Fields
-                benefitStated: false,
-                benefitQuantified: false,
-                timeToBenefitStated: false,
-                valueTiming: 'not_present',
-
-                // Offer Fields
-                offerPresent: false,
-                offerTiming: 'not_shown',
-
-                // Other Observable Fields
-                proofPresent: false,
-                pricingVisible: false,
-                guaranteeMentioned: false,
-
-                // Alignment
-                adLpMatch: 'unsure',
-
-                // Metadata
-                userConfirmed: false,
-                llmAssisted: false,
-
-                // Legacy
-                primaryAngle: 'Unknown',
-                emotionalTone: 'Neutral',
-                persuasionType: 'unknown',
-                diagnosticNotes: ['New upload - use checklist to describe message structure'],
-            },
-            nextBestAction: {
-                action: 'Run this creative to gather performance data',
-                testType: 'structure',
-                expectedLearningValue: 'high',
-                variablesToLock: [],
-                hypothesis: 'Structure extracted - need real performance data for conversion analysis',
-            },
-        };
-
-        // Add to creatives list
-        setCreatives(prev => [newCreative, ...prev]);
-    };
+    // Creative handlers removed - creativeExtractor deleted
 
     // Helper to determine which system has authority
     const getSystemAuthority = (creative: Creative): { authority: SystemAuthority; message: string; action: string } => {
@@ -3096,12 +2978,7 @@ export default function AdsPage() {
                 )}
             </AnimatePresence>
 
-            {/* Upload Creative Modal */}
-            <UploadCreativeModal
-                isOpen={showUploadModal}
-                onClose={() => setShowUploadModal(false)}
-                onCreativeExtracted={handleCreativeExtracted}
-            />
+
         </div>
     );
 }
