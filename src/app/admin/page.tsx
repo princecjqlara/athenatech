@@ -41,6 +41,8 @@ export default function AdminPage() {
     const [generating, setGenerating] = useState(false);
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'users' | 'invites'>('users');
+    const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (isAdmin) {
@@ -121,6 +123,37 @@ export default function AdminPage() {
             .update({ role: newRole })
             .eq('id', userId);
         fetchUsers();
+    }
+
+    async function deleteUser(userId: string) {
+        setDeleting(true);
+        try {
+            // Call the admin API to delete the user (requires service role key)
+            const response = await fetch('/api/admin/delete-user', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId,
+                    requestingUserId: profile?.id,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                console.error('Delete failed:', result.error);
+                alert(result.error || 'Failed to delete user');
+                return;
+            }
+
+            fetchUsers();
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            alert('Failed to delete user. Please try again.');
+        } finally {
+            setDeleting(false);
+            setDeleteTarget(null);
+        }
     }
 
     function copyToClipboard(code: string) {
@@ -244,6 +277,13 @@ export default function AdminPage() {
                                                             >
                                                                 {user.is_suspended ? <PlayCircle size={16} /> : <Ban size={16} />}
                                                             </button>
+                                                            <button
+                                                                onClick={() => setDeleteTarget(user)}
+                                                                className="btn-icon w-8 h-8 text-[var(--error)] hover:bg-red-500/20"
+                                                                title="Delete Account"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
                                                         </>
                                                     )}
                                                 </td>
@@ -339,6 +379,54 @@ export default function AdminPage() {
                             )}
                         </GlassCard>
                     </>
+                )}
+
+                {/* Delete Confirmation Modal */}
+                {deleteTarget && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl"
+                        >
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                                    <Trash2 className="text-red-500" size={32} />
+                                </div>
+                                <h3 className="text-xl font-bold mb-2">Delete Account</h3>
+                                <p className="text-[var(--text-secondary)]">
+                                    Are you sure you want to delete the account for{' '}
+                                    <span className="font-semibold text-[var(--text-primary)]">
+                                        {deleteTarget.full_name || deleteTarget.email}
+                                    </span>?
+                                </p>
+                                <p className="text-sm text-[var(--error)] mt-2">
+                                    This action cannot be undone.
+                                </p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setDeleteTarget(null)}
+                                    className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] hover:bg-[var(--glass-border)] transition-colors"
+                                    disabled={deleting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => deleteUser(deleteTarget.id)}
+                                    disabled={deleting}
+                                    className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {deleting ? (
+                                        <RefreshCw size={16} className="animate-spin" />
+                                    ) : (
+                                        <Trash2 size={16} />
+                                    )}
+                                    Delete
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </main>
         </div>
