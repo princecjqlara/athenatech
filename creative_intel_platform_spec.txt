@@ -1,0 +1,731 @@
+CREATIVE INTELLIGENCE + CONVERSION PIPELINE PLATFORM
+Full Product & Engineering Documentation (Architecture → Logic → Build)
+Version: 1.0
+Date: 2026-01-10 (Asia/Manila)
+
+=====================================================================
+0) PURPOSE & SCOPE
+=====================================================================
+This document specifies an end-to-end, multi-tenant ads intelligence platform that:
+- Connects to Meta (Facebook/Instagram) Ads and imports performance + creatives.
+- Optionally imports Leads (Lead Ads) automatically.
+- Connects Conversion API (CAPI) to automatically fire server-side events.
+- Provides an AI-assisted pipeline to analyze creatives (structure-based) and conversions (message/funnel/offer owner).
+- Supports Admin + Client roles, multi-tenant data isolation, controlled data sharing across clients, and public data publishing.
+- Provides UI pages with clear logic per page, APIs, services, database schema, background jobs, security, and deployment guidance.
+- Tech stack: Next.js (App Router) + Node.js backend services (NestJS/Express), Java (optional microservice), Postgres, Redis, queues, object storage, and an AI service.
+
+Important design principles:
+1) TWO-SYSTEM ARCHITECTURE:
+   - Structure/Delivery System: predicts/diagnoses delivery mechanics (thumbstop/early CTR/watch-time).
+   - Conversion Owner System: measures conversion efficiency + funnel leakage; does NOT blame structure when delivery is healthy.
+2) NO TRAIT SPLITTING REQUIRED for structure system: relies on measured structure features and time-segmented mechanics.
+3) SHARING is controlled and privacy-safe:
+   - Share “structures/templates” and aggregate stats cross-tenant.
+   - Never share raw customer PII or proprietary ad content publicly unless explicitly published.
+
+=====================================================================
+1) HIGH-LEVEL ARCHITECTURE
+=====================================================================
+1.1 Components
+- Web App (Next.js):
+  - Admin console + Client portal
+  - OAuth connect flows (Meta)
+  - Creative library, dashboards, pipelines, alerts
+  - Public pages (optional) for published insights datasets
+
+- API Gateway (Node.js, NestJS or Express):
+  - Auth, RBAC, tenant context
+  - REST endpoints (GraphQL optional)
+  - Webhooks endpoints (Meta Lead Ads, CAPI test events, etc.)
+
+- Background Workers (Node.js):
+  - Scheduled sync jobs (Meta Ads insights, creatives, lead forms/leads)
+  - Event ingestion and batching for CAPI
+  - AI pipeline orchestration (feature extraction, model scoring)
+  - Data sharing/publishing jobs
+
+- AI Service (Python or Node; can be containerized):
+  - Media processing: extract structure features from video/image
+  - Model scoring: delivery predictions, clustering, nearest-neighbor explanations
+  - Optional LLM agent for summarization and recommendations
+  - Model registry + versioning
+
+- Storage:
+  - Postgres (primary relational DB)
+  - Redis (cache + job queues, rate limits)
+  - Object Storage (S3-compatible): creatives (images/videos), derived features, thumbnails
+  - Analytics Store (optional): ClickHouse/BigQuery for large-scale insights
+
+- Optional Java Microservice:
+  - High-throughput event processing for CAPI or ETL (Kafka streams)
+  - Only if needed; Node workers are sufficient initially.
+
+1.2 Data Flow Overview
+A) Meta Connection:
+   - User OAuth → store page/ad account tokens securely
+   - Regular sync:
+     - campaigns/adsets/ads
+     - creative objects (image/video/copy metadata)
+     - insights metrics (CTR/CPC/CPA/ROAS + breakdowns)
+     - lead ads: lead forms + lead submissions (optional)
+B) Structure Pipeline:
+   - Download creatives → extract structure features → store in feature tables
+   - Score delivery: predict early metrics + risk flags
+C) Conversion Owner Pipeline:
+   - Ingest conversion events (Pixel/CAPI) + funnel events
+   - Compute conversion efficiency normalized within comparable buckets
+   - Identify funnel leakage and message/offer mismatch (optional)
+D) Recommendations & Reporting:
+   - Quadrant outcomes (delivery vs conversion)
+   - Ranked next-actions per creative and per campaign
+E) Sharing:
+   - Generate anonymized aggregate insights → share to selected tenants
+   - Optional public dataset publication with explicit approvals
+
+=====================================================================
+2) TENANCY, ROLES, SECURITY, AND SHARING
+=====================================================================
+2.1 Tenancy Model
+- Multi-tenant with strict row-level isolation:
+  - Every record includes tenant_id
+  - API enforces tenant_id from session token/claims
+  - DB-level Row Level Security (RLS) recommended in Postgres
+
+2.2 Roles & Permissions (RBAC)
+Roles:
+- Super Admin (platform operator)
+- Tenant Admin (client owner)
+- Analyst/Marketer (client user)
+- Viewer (read-only)
+- Integration Bot (service account; token-limited)
+Public:
+- Anonymous read-only access to explicitly published public datasets/pages only.
+
+Key permissions:
+- manage_tenant, manage_users, manage_billing (optional)
+- connect_meta, manage_integrations
+- view_ads_data, view_creatives
+- manage_sharing, publish_public
+- configure_capi, manage_events
+
+2.3 Data Sharing Model
+Three sharing levels:
+A) Private (default): tenant-only.
+B) Shared with other tenants (opt-in):
+   - Share only aggregated metrics and structure patterns by default.
+   - Optional: share specific creatives if explicitly marked shareable.
+C) Public publishing (opt-in):
+   - Only pre-approved datasets or insights summaries.
+   - Never publish PII or lead details. Never publish raw event-level user identifiers.
+
+Sharing objects:
+- Structure Templates: named patterns (e.g., “FastCut_0-1s”, “TextEarly_0.5s”)
+- Aggregate performance stats: percentiles by placement, objective, vertical category
+- Benchmark curves: expected thumbstop/CTR distributions
+- Recommended checks: “safe zone compliance”, “opening motion threshold”
+
+2.4 Privacy & Compliance
+- Encrypt tokens at rest (KMS-managed envelope encryption).
+- Encrypt PII fields (leads, emails, phone numbers) with per-tenant key.
+- Audit logs for:
+  - token access
+  - data export
+  - sharing/publishing changes
+- GDPR/CCPA-ready:
+  - delete requests (erase PII)
+  - data portability exports per tenant
+
+=====================================================================
+3) META (FACEBOOK/INSTAGRAM) INTEGRATION
+=====================================================================
+3.1 What to Connect
+- Meta Business App (your app)
+- Permissions typically needed (depends on features):
+  - ads_read (read ads + insights)
+  - leads_retrieval (for Lead Ads)
+  - pages_read_engagement (if needed for page context)
+  - business_management (for listing assets in Business Manager; optional)
+  - Note: exact permissions must be validated with Meta’s current requirements.
+
+3.2 OAuth Flow (Web)
+- Next.js route: /integrations/meta/connect
+- Redirect to Meta OAuth consent screen
+- Callback: /integrations/meta/callback
+- Exchange code for access token (short-lived)
+- Exchange for long-lived token
+- Store token + metadata (scopes, expiry, user_id) encrypted
+- Let user choose:
+  - Ad accounts to sync
+  - Pages/Lead forms to sync
+  - Pixel/Dataset for CAPI events (if applicable)
+
+3.3 Sync Strategy
+Entities:
+- ad_accounts
+- campaigns, adsets, ads
+- creatives:
+  - object_story_spec, asset_feed_spec (dynamic creatives)
+  - image_hash / video_id
+- insights:
+  - metrics by day
+  - breakdowns: placement, age, gender, device, country (configurable)
+Lead Ads:
+- leadgen_forms
+- leads (webhooks + polling fallback)
+
+Sync cadence:
+- Ads + insights: every 1-6 hours (configurable)
+- Creatives assets: on-demand + cached
+- Leads: near real-time via webhooks + periodic reconciliation
+
+3.4 Meta Webhooks (Leads)
+Endpoint: POST /webhooks/meta
+- Verify endpoint during setup (GET verify)
+- On lead event:
+  - Validate signature
+  - Identify tenant + page
+  - Fetch full lead details via API (if webhook payload is limited)
+  - Store lead with source metadata
+  - Trigger automation: CRM export, email notification, event firing (optional)
+
+=====================================================================
+4) CAPI + EVENT PIPELINE (SERVER-SIDE EVENTS)
+=====================================================================
+4.1 Goals
+- Automatically fire server-side events to Meta (CAPI) for:
+  - Purchase, Lead, CompleteRegistration, AddToCart, ViewContent, etc.
+- Improve attribution, reduce signal loss, unify with client-side pixel.
+
+4.2 Event Sources
+A) Website/App instrumentation:
+- Server events from checkout/back-end
+- Client pixel events forwarded to server (hybrid)
+B) Lead Ads:
+- When a lead is received, optionally emit “Lead” event to Meta via CAPI.
+C) Offline conversions:
+- CSV uploads or CRM integration (optional)
+
+4.3 Event Schema (Normalized)
+event_id (dedupe key), event_name, event_time
+tenant_id, meta_pixel_id or dataset_id
+user_data: email/phone external_id (hashed), ip, ua
+custom_data: currency, value, contents, order_id, lead_form_id, etc.
+source_url, action_source (website/app/phone_call/system_generated)
+attribution: fbp/fbc (if available)
+
+4.4 Event Dedupe
+- event_id should match pixel event_id if available.
+- Deduplicate by (tenant_id, meta_pixel_id, event_id).
+- Store raw event + normalized event + send status.
+
+4.5 Event Sending
+- Batch events per pixel to respect rate limits.
+- Retry with exponential backoff.
+- Track:
+  - sent_at, status, response payload summary, error codes.
+
+4.6 Auto-Fire Logic (Rules Engine)
+User-configurable rules per tenant:
+- When lead received from form X → fire CAPI Lead event
+- When CRM status changes to “Qualified” → fire LeadQualified event (custom)
+- When purchase recorded → fire Purchase event with value/currency
+
+Rules evaluation runs in worker on event ingestion.
+
+=====================================================================
+5) AI-ASSISTED PIPELINE
+=====================================================================
+5.1 Separation of Concerns
+- Structure/Delivery AI:
+  - Inputs: creative media + placement context
+  - Outputs: structure features, predictions, nearest-neighbor comparisons, risk flags
+- Conversion Owner AI:
+  - Inputs: conversion metrics + funnel analytics + offer metadata
+  - Outputs: conversion efficiency score, funnel leak diagnosis, message/offer recommendations (optional)
+
+5.2 Structure Feature Extraction (Video)
+Compute purely mechanical features, time-segmented:
+- Duration, FPS, resolution, aspect ratio
+- Cut count overall + per segment (0-1s, 1-3s, 3-5s, 5-10s, 10s+)
+- Avg shot length per segment
+- Motion score (frame diff) curve; motion onset delay
+- Text presence curve (OCR area %, not meaning)
+- Brightness/contrast per segment
+- Scene count estimate
+- Audio structure (optional): loudness curve, silence ratio, voice/music detection (no semantics)
+- Script timing structure (optional): words/sec from transcript timing (if available), pause distribution (no interpretation)
+
+5.3 Structure Feature Extraction (Image)
+- Subject occupancy proxy (saliency-based)
+- Edge density / clutter score
+- Contrast/brightness
+- Text area % (OCR, no reading)
+- Negative space ratio
+- Focal point location (saliency centroid)
+- Color count / palette entropy
+- Placement fit and safe-zone risk
+
+5.4 Delivery Prediction Targets
+Pre-launch:
+- expected thumbstop (2s view rate proxy)
+- expected early CTR
+- delivery risk score (likelihood of poor early signals)
+
+Post-launch updates:
+- incorporate early real metrics for improved CPA/ROAS forecasting (still separate from conversion owner conclusions)
+
+5.5 Explainability Without Traits
+Per creative:
+- Time-segment attribution: “0–1s opening” vs “5–10s collapse”
+- Feature contribution: “late motion onset increased risk”
+- Nearest-neighbor: “most similar winners differ in earlier text start”
+
+5.6 Conversion Owner Measurement
+- Only evaluate conversion if delivery is healthy (structure gate).
+- Normalize by comparable buckets:
+  - placement, audience type, geo, objective, time window
+- Output:
+  - conversion efficiency score (e.g., CPA percentile among delivery-healthy)
+  - funnel leak stage
+  - confidence (conversion volume + variance)
+- If volume low, show “insufficient evidence” and recommend tests.
+
+5.7 LLM Assistance (Optional)
+Use LLM for:
+- Summarizing insights into human-readable recommendations
+- Generating experiment plans
+- Drafting creative briefs (based on winners and structural patterns)
+Guardrails:
+- LLM cannot claim causal certainty.
+- Must cite evidence from metrics and comparisons.
+- Must not output PII.
+
+=====================================================================
+6) APPLICATION LOGIC: PAGES & FEATURES
+=====================================================================
+6.1 Authentication & Tenant Selection
+Pages:
+- /login
+- /signup (optional)
+- /select-tenant (if user belongs to multiple tenants)
+Logic:
+- JWT session with tenant_id + roles
+- Enforce RLS and RBAC in API
+
+6.2 Admin Console (Super Admin)
+Pages:
+- /admin/tenants
+  - Create/disable tenants
+  - Set plan limits (sync frequency, storage, AI quota)
+- /admin/users
+  - Platform users, audit
+- /admin/integrations/meta
+  - Monitor webhook health, token failures, API usage
+- /admin/publications
+  - Review/approve public datasets if required by policy
+
+6.3 Tenant Admin Portal
+Pages:
+- /settings/team
+  - Invite users, roles
+- /settings/integrations/meta
+  - Connect/disconnect Meta
+  - Choose ad accounts, pixels, pages, forms
+  - Set sync cadence
+- /settings/capi
+  - Configure pixel/dataset
+  - Domain verification info
+  - Test events + diagnostics
+- /settings/sharing
+  - Share templates/benchmarks to other tenants
+  - Control public publishing
+- /settings/privacy
+  - Data retention, PII handling, export requests
+
+6.4 Client Workspace (Core)
+Pages:
+- /dashboard
+  - KPIs: spend, CPA, ROAS, leads, delivery health index
+  - Quadrant distribution (Delivery vs Conversion)
+  - Alerts: “delivery failing”, “conversion drop”, “fatigue”
+- /ads
+  - Table of ads with filters (placement, objective, date)
+  - Status chips: Winner/Neutral/Loser/Insufficient data
+  - Delivery vs Conversion split
+- /creatives
+  - Creative library with thumbnails/video previews
+  - Structural scores, structure templates, nearest-neighbor winners
+  - “Fix suggestions” only if delivery unhealthy
+- /pipelines
+  - Sync status
+  - AI processing status
+  - Event pipeline health (CAPI send success)
+- /leads
+  - Lead inbox (Lead Ads)
+  - Export/CRM integrations
+  - Auto-event firing status (Lead event sent?)
+- /experiments
+  - Define experiments (structure-only tests, message tests)
+  - A/B results with confidence and gating thresholds
+- /benchmarks
+  - Shared structures + aggregated performance from community/public dataset
+  - Your account vs benchmark comparisons
+
+6.5 Public Pages (Optional)
+- /public/benchmarks/[dataset]
+- /public/templates/[template-id]
+Content rules:
+- Only aggregated/anonymized
+- No creative media unless explicitly published
+- No lead/event-level data
+
+=====================================================================
+7) BACKEND API DESIGN
+=====================================================================
+7.1 Core API Conventions
+- All requests include tenant context from auth token.
+- Use idempotency keys for create operations (events, imports).
+- Pagination: cursor-based.
+- Rate limiting per tenant.
+
+7.2 Example Endpoints (REST)
+Auth:
+- POST /api/auth/login
+- POST /api/auth/logout
+- GET  /api/me
+
+Meta integration:
+- GET  /api/integrations/meta/status
+- POST /api/integrations/meta/connect-url
+- POST /api/integrations/meta/callback
+- POST /api/integrations/meta/select-assets
+- POST /api/integrations/meta/sync-now
+
+Ads/Creatives:
+- GET  /api/ads?date_from=&date_to=&placement=&objective=
+- GET  /api/ads/{ad_id}
+- GET  /api/creatives?type=video|image&status=
+- GET  /api/creatives/{creative_id}
+- POST /api/creatives/{creative_id}/reprocess
+
+Leads:
+- GET  /api/leads?date_from=&status=
+- POST /api/leads/{lead_id}/export
+
+CAPI events:
+- POST /api/events/ingest
+- GET  /api/events?status=&date_from=
+- POST /api/events/rules
+- POST /api/events/test
+
+Sharing/Publications:
+- POST /api/sharing/grants
+- GET  /api/sharing/available-datasets
+- POST /api/publications/publish
+- GET  /api/publications/public-datasets
+
+AI insights:
+- GET  /api/insights/delivery?creative_id=
+- GET  /api/insights/conversion?ad_id=
+- GET  /api/insights/quadrants?date_from=&date_to=
+
+Webhooks:
+- GET/POST /webhooks/meta (verify + receive)
+
+=====================================================================
+8) DATABASE SCHEMA (POSTGRES)
+=====================================================================
+8.1 Core Tables (simplified)
+tenants(id, name, plan, created_at)
+users(id, email, name, created_at)
+user_tenants(user_id, tenant_id, role, created_at)
+
+integrations_meta(
+  id, tenant_id, meta_user_id, token_encrypted, scopes, expires_at,
+  created_at, updated_at
+)
+meta_assets(
+  id, tenant_id, ad_account_id, page_id, pixel_id, form_id,
+  enabled, metadata_json
+)
+
+campaigns(id, tenant_id, meta_campaign_id, name, status, objective, ...)
+adsets(id, tenant_id, meta_adset_id, campaign_id, ...)
+ads(id, tenant_id, meta_ad_id, adset_id, creative_id, status, ...)
+
+creatives(
+  id, tenant_id, meta_creative_id, type, storage_url, thumbnail_url,
+  primary_text, headline, cta, format, created_at
+)
+
+insights_daily(
+  id, tenant_id, meta_ad_id, date,
+  placement, audience_bucket, geo,
+  impressions, clicks, spend, ctr, cpc, cpm,
+  purchases, leads, value, cpa, roas,
+  video_3s, thruplay, avg_watch_time,
+  created_at
+)
+
+structure_features_video(
+  creative_id, tenant_id,
+  duration_s, aspect_ratio, fps,
+  cuts_total, cuts_0_1s, cuts_1_3s, cuts_3_5s, cuts_5_10s,
+  motion_onset_ms, motion_curve_json,
+  text_area_curve_json,
+  brightness_curve_json, contrast_curve_json,
+  audio_loudness_curve_json, silence_ratio,
+  version, computed_at
+)
+
+structure_features_image(
+  creative_id, tenant_id,
+  aspect_ratio, subject_occupancy, edge_density, clutter_score,
+  text_area_pct, focal_x, focal_y,
+  brightness, contrast, palette_entropy,
+  version, computed_at
+)
+
+delivery_scores(
+  creative_id, tenant_id,
+  placement, audience_bucket,
+  predicted_early_ctr, predicted_thumbstop, delivery_risk,
+  explanation_json, model_version, scored_at
+)
+
+conversion_scores(
+  ad_id, tenant_id,
+  date_from, date_to,
+  bucket_json,
+  cpa_percentile, cvr_delta, roas_delta,
+  funnel_leak_stage, confidence,
+  explanation_json, computed_at
+)
+
+leads(
+  id, tenant_id, meta_lead_id, form_id, created_time,
+  full_name_enc, email_enc, phone_enc, raw_json,
+  status, exported_at
+)
+
+events_raw(
+  id, tenant_id, source, received_at, payload_json
+)
+events_normalized(
+  id, tenant_id, event_id, event_name, event_time,
+  pixel_id, user_data_hashes_json, custom_data_json,
+  send_status, last_error, sent_at
+)
+
+sharing_grants(
+  id, from_tenant_id, to_tenant_id, scope, created_at
+)
+published_datasets(
+  id, tenant_id, dataset_type, public_slug, config_json,
+  approved_by_admin, published_at
+)
+
+audit_logs(
+  id, tenant_id, user_id, action, entity_type, entity_id,
+  metadata_json, created_at
+)
+
+=====================================================================
+9) JOBS, QUEUES, AND SCHEDULERS
+=====================================================================
+9.1 Queue System
+- BullMQ (Node) + Redis, or RabbitMQ/Kafka for scale.
+Queues:
+- meta_sync
+- creative_download
+- feature_extract
+- delivery_score
+- conversion_compute
+- leads_reconcile
+- capi_send
+- share_publish
+
+9.2 Scheduled Jobs
+- Meta Sync Job:
+  - Pull insights daily and hourly windows
+- Token Refresh & Health Check
+- Lead reconciliation job
+- Conversion recompute job (rolling windows)
+- Public dataset refresh job
+
+9.3 Idempotency
+- Every job must be safe to retry.
+- Use unique keys (tenant_id + meta_id + date) to avoid duplicates.
+
+=====================================================================
+10) BUILD PLAN (PHASED IMPLEMENTATION)
+=====================================================================
+Phase 0: Foundations (1–2 weeks)
+- Tenancy, auth, RBAC, basic Next.js shell
+- Postgres schema + migrations
+- Audit logs
+
+Phase 1: Meta Ads Read + Dashboards (2–4 weeks)
+- OAuth connect, sync ads/insights
+- Ads table + dashboard
+- Creative library (metadata only)
+
+Phase 2: Lead Ads Import + Lead Inbox (2–3 weeks)
+- Webhooks + reconciliation
+- Lead encryption + export
+
+Phase 3: Structure Pipeline MVP (3–6 weeks)
+- Asset download + storage
+- Image structure features + video structure features (basic)
+- Delivery scoring (simple baseline model / heuristics)
+- Creative page explanations + nearest-neighbor (optional)
+
+Phase 4: CAPI + Event Engine (3–6 weeks)
+- Event ingestion API + queue
+- Rules engine + sender + diagnostics
+- Test events UI
+
+Phase 5: Conversion Owner System (3–6 weeks)
+- Conversion labeling + normalization buckets
+- Funnel stage metrics integration (from client site/app)
+- Quadrant logic + recommended actions
+
+Phase 6: Sharing + Public Publishing (2–6 weeks)
+- Sharing grants
+- Aggregate datasets + anonymization
+- Public pages
+
+Phase 7: AI Assist + Advanced ML (ongoing)
+- Better scoring models
+- LLM summaries + experiment generator
+- Multi-tenant model calibration
+
+=====================================================================
+11) CORE LOGIC (THE RULES THAT KEEP IT SANE)
+=====================================================================
+11.1 Gating Thresholds
+- Delivery evaluation can start at low impressions:
+  - e.g., >= 1,000 impressions for early CTR/thumbstop estimates
+- Conversion evaluation requires higher evidence:
+  - e.g., >= 20 conversions for confident CPA labeling
+- If insufficient data: label “Insufficient evidence” (never call it loser)
+
+11.2 Quadrant Ownership Rules
+- If Delivery Healthy:
+  - Structure system cannot recommend structure edits
+  - Conversion owner system recommends message/offer/funnel actions
+- If Delivery Unhealthy:
+  - Structure system recommends structural changes and tests
+  - Conversion owner system may be “blocked” until delivery improves
+
+11.3 Recommendations: Counterfactuals + Safe Advice
+- Suggest edits as probabilistic improvements:
+  - “Moving text earlier increased early CTR in 62% of similar cases”
+- Prefer experiment recommendations when confidence is low.
+
+11.4 Sharing Safety Rules
+- Default share: aggregates only.
+- Public share: opt-in + approval + anonymization.
+- Never share PII, raw event user_data, raw leads.
+- Never share private creative media unless explicitly marked.
+
+=====================================================================
+12) FRONTEND IMPLEMENTATION NOTES (NEXT.JS)
+=====================================================================
+12.1 Next.js Structure (App Router)
+- app/(auth)/login/page.tsx
+- app/(auth)/signup/page.tsx
+- app/(app)/dashboard/page.tsx
+- app/(app)/ads/page.tsx
+- app/(app)/creatives/page.tsx
+- app/(app)/creatives/[id]/page.tsx
+- app/(app)/leads/page.tsx
+- app/(app)/pipelines/page.tsx
+- app/(app)/settings/integrations/meta/page.tsx
+- app/(app)/settings/capi/page.tsx
+- app/(app)/settings/sharing/page.tsx
+- app/(public)/public/benchmarks/[slug]/page.tsx
+
+12.2 Page Logic Pattern
+Each page should have:
+- Server-side auth guard (middleware)
+- Fetch list/details via API
+- Use SWR/React Query for client refresh
+- Role-based UI controls (RBAC)
+- Clear states: loading, empty, errors, insufficient data
+
+12.3 Example: Creative Detail Page
+Displays:
+- Media preview
+- Structure scores by placement
+- Segment curves (motion/text/cuts)
+- “Delivery health” badge
+- If Delivery unhealthy:
+  - Show “structural edits to try”
+- If Delivery healthy:
+  - Hide structural edits; show conversion owner summary
+- Nearest-neighbor winners from shared or tenant dataset
+
+=====================================================================
+13) BACKEND IMPLEMENTATION NOTES (NODE + OPTIONAL JAVA)
+=====================================================================
+13.1 Node (NestJS recommended)
+Modules:
+- AuthModule (JWT, sessions)
+- TenantModule (tenant resolution, RLS helpers)
+- MetaModule (OAuth, sync, assets)
+- InsightsModule (queries, aggregates)
+- CreativesModule (asset mgmt)
+- LeadsModule (webhooks, encryption)
+- EventsModule (ingest, rules, send)
+- AiModule (job orchestration, results)
+- SharingModule (datasets, grants)
+- AdminModule (platform ops)
+
+13.2 Java Optional Service
+Use only if:
+- Event throughput is very high
+- Need stream processing (Kafka)
+Otherwise skip.
+
+=====================================================================
+14) OBSERVABILITY & OPERATIONS
+=====================================================================
+- Structured logs (tenant_id, request_id)
+- Metrics:
+  - sync success rate
+  - webhook latency
+  - CAPI send success rate
+  - job queue depth
+  - model scoring latency
+- Tracing (OpenTelemetry)
+- Alerts:
+  - token expired
+  - sync failing
+  - webhook signature failures
+  - CAPI errors spiking
+
+=====================================================================
+15) SECURITY CHECKLIST
+=====================================================================
+- Token encryption + rotation
+- Webhook signature verification
+- Strict CORS & CSRF protections
+- Rate limiting per tenant
+- RLS enforcement tests
+- PII encryption + access audit
+- Public publishing review gates
+- Secrets in vault (not env files in repo)
+
+=====================================================================
+16) APPENDIX: DEFINITIONS
+=====================================================================
+- Delivery Healthy: early engagement + CPM stability above configured thresholds for that placement/audience bucket.
+- Conversion Owner: system that measures conversion efficiency for delivery-healthy traffic and diagnoses funnel leakage.
+- Structure Features: measurable mechanics of media (timing, motion, text area, cuts, composition).
+- Trait Splitting: semantic labeling (hooks/emotions/messages); NOT required for structure system.
+
+=====================================================================
+END OF DOCUMENT
+=====================================================================
